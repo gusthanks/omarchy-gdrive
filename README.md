@@ -26,9 +26,12 @@
 - **No secrets in the wrong place.** The `client_secret` is written straight into `~/.config/rclone/rclone.conf` (mode 600), never passed on a command line, never logged, never shown in the widget.
 - **English and Portuguese**, following the Omarchy language setting (falls back to `$LANG`).
 
-<!-- screenshot: assets/panel.png — the popup -->
-<!-- screenshot: assets/bar.png — bar pill states -->
-<!-- screenshot: assets/doctor.png — doctor output -->
+<p align="center">
+  <img src="assets/panel.png" alt="Google Drive popup: state, cache, quota, actions" width="70%" />
+</p>
+<p align="center">
+  <img src="assets/bar.png" alt="Bar pill" />
+</p>
 
 ## Install
 
