@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# omarchy-gdrive — mount Google Drive on Omarchy with rclone, the reproducible way.
+#
+#   omarchy-gdrive setup     guided, idempotent install (own OAuth client, systemd user unit, bookmark)
+#   omarchy-gdrive status    one screen (or --json for the bar widget)
+#   omarchy-gdrive doctor    checks everything and says what to do
+#   omarchy-gdrive remove    undoes it all; your files on Drive are never touched
+#
+# Nothing here runs as root except `pacman` when rclone is missing. Tokens and
+# the client secret live only in ~/.config/rclone/rclone.conf (mode 600).
+
+set -uo pipefail
+
+# Resolve the real location even when called through the ~/.local/bin symlink.
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+ROOT_DIR=$(cd "$(dirname "$SELF")/.." && pwd)
+LIB_DIR="$ROOT_DIR/lib"
+TEMPLATE_DIR="$ROOT_DIR/templates"
+I18N_DIR="$ROOT_DIR/i18n/cli"
+
+# shellcheck source=../lib/i18n.sh
+source "$LIB_DIR/i18n.sh"
+# The provider module sets identity first, then the generic core uses it.
+# shellcheck source=../lib/gdrive.sh
+source "$LIB_DIR/gdrive.sh"
+# shellcheck source=../lib/common.sh
+source "$LIB_DIR/common.sh"
+
+i18n_load "$I18N_DIR"
+load_state
+
+usage() {
+  t help.usage "$CLI_NAME" "$CLI_VERSION"
+  echo
+}
+
+# ---------------------------------------------------------------------------
+# setup
+# ---------------------------------------------------------------------------
+cmd_setup() {
+  local mode="" client_only=0
+  while (( $# )); do
+    case $1 in
+      --adopt) mode=adopt ;;
+      --replace) mode=replace ;;
+      --client) client_only=1 ;;
+      --credentials|--credentials-file) GDRIVE_CREDENTIALS_FILE=${2/#\~/$HOME}; shift ;;
+      --shared-client) GDRIVE_ACCEPT_SHARED=1 ;;
+      --remote) REMOTE=$2; shift ;;
+      --mountpoint) MOUNTPOINT=${2/#\~/$HOME}; shift ;;
+      --service) SERVICE=$2; shift ;;
+      -h|--help) usage; return 0 ;;
+      *) die "$(t err.unknownOption "$1")" ;;
+    esac
+    shift
+  done
+
+  title "$(t setup.title "$DISPLAY_NAME")"
+  ensure_deps
+
+  # --client: only (re)do the OAuth client of an existing remote.
+  if (( client_only )); then
+    remote_exists || die "$(t doctor.noRemote "$REMOTE" "$CLI_NAME")"
+    provider_setup_intro
+    provider_create_remote
+    if unit_exists && [[ $(service_active_state) == active ]]; then
+      confirm "$(t setup.restartConfirm "$SERVICE")" && { systemctl_user restart "$SERVICE.service"; wait_for_mount 30 && ok "$(t setup.mounted "$MOUNTPOINT")"; }
+    fi
+    return 0
+  fi
+
+  # 1. An existing unit? Adopt it (default) or replace it with our template.
+  if unit_exists && ! unit_is_managed; then
+    local u; u=$(unit_path)
+    unit_parse_execstart "$u" || warn "$(t setup.unitUnparsed "$u")"
+    if [[ -z $mode ]]; then
+      if [[ $MANAGED == adopted ]]; then
+        mode=adopt
+      else
+        say "$(t setup.existingFound "$u" "$REMOTE" "$MOUNTPOINT")"
+        local o_adopt o_replace o_cancel pick
+        o_adopt=$(t setup.optAdopt); o_replace=$(t setup.optReplace); o_cancel=$(t setup.optCancel)
+        pick=$(choose "$(t setup.chooseExisting)" "$o_adopt" "$o_replace" "$o_cancel")
+        case $pick in
+          "$o_adopt") mode=adopt ;;
+          "$o_replace") mode=replace ;;
+          *) say "$(t common.aborted)"; return 1 ;;
+        esac
+      fi
+    fi
+    if [[ $mode == adopt ]]; then
+      MANAGED=adopted
+      ok "$(t setup.adopted "$u")"
+    else
+      MANAGED=template
+      info "$(t setup.replacing "$u")"
+    fi
+  else
+    MANAGED=template
+  fi
+  save_state
+
+  # 2. The rclone remote: reuse, upgrade its credentials, or create it.
+  if remote_exists; then
+    local type; type=$(remote_type)
+    [[ $type == "$BACKEND_TYPE" ]] || die "$(t setup.remoteWrongType "$REMOTE" "$type" "$BACKEND_TYPE")"
+    ok "$(t setup.remoteExists "$REMOTE")"
+    provider_offer_credentials
+  else
+    provider_setup_intro
+    provider_create_remote
+  fi
+  secure_rclone_conf
+
+  # 3. Mount point.
+  mkdir -p "$MOUNTPOINT"
+
+  # 4. The systemd user unit.
+  if [[ $MANAGED == template ]]; then
+    local was_active=0
+    [[ $(service_active_state) == active ]] && was_active=1
+    if install_unit "$TEMPLATE_DIR/$DEFAULT_SERVICE.service"; then
+      ok "$(t setup.unitWritten "$(unit_path)" "$(unit_flag --vfs-cache-max-size)")"
+      if (( was_active )); then
+        if confirm "$(t setup.restartConfirm "$SERVICE")"; then
+          systemctl_user restart "$SERVICE.service"
+        fi
+      fi
+    else
+      ok "$(t setup.unitUnchanged "$(unit_path)")"
+    fi
+  fi
+  systemctl_user enable "$SERVICE.service" >/dev/null 2>&1 || true
+  if [[ $(service_active_state) != active ]]; then
+    info "$(t setup.starting "$SERVICE")"
+    systemctl_user start "$SERVICE.service" || warn "$(t err.startFailed "$SERVICE")"
+  fi
+  if wait_for_mount 30; then ok "$(t setup.mounted "$MOUNTPOINT")"; else warn "$(t setup.mountTimeout "$SERVICE" "$CLI_NAME")"; fi
+
+  # 5. Desktop integration.
+  bookmark_add && ok "$(t setup.bookmarkAdded "$DISPLAY_NAME")"
+  if link_cli "$SELF"; then ok "$(t setup.linked "$LOCAL_BIN/$CLI_NAME")"; fi
+  save_state
+
+  hr
+  ok "$(t setup.done "$DISPLAY_NAME" "$MOUNTPOINT")"
+  say "$(t setup.doctorHint "$CLI_NAME")"
+}
+
+# ---------------------------------------------------------------------------
+# dispatch
+# ---------------------------------------------------------------------------
+main() {
+  local cmd="" args=()
+  while (( $# )); do
+    case $1 in
+      -y|--yes) ASSUME_YES=1 ;;
+      --json) JSON_OUTPUT=1 ;;
+      -q|--quiet) QUIET=1 ;;
+      -V|--version) echo "$CLI_NAME $CLI_VERSION"; return 0 ;;
+      -h|--help) usage; return 0 ;;
+      *) if [[ -z $cmd ]]; then cmd=$1; else args+=("$1"); fi ;;
+    esac
+    shift
+  done
+  case ${cmd:-status} in
+    setup)    cmd_setup "${args[@]}" ;;
+    status)   cmd_status "${args[@]}" ;;
+    start|mount)    cmd_start ;;
+    stop|unmount|umount)  cmd_stop ;;
+    restart)  cmd_restart ;;
+    logs|log) cmd_logs "${args[@]}" ;;
+    doctor)   cmd_doctor "${args[@]}" ;;
+    open)     cmd_open ;;
+    quota|about) cmd_quota ;;
+    remove|uninstall) cmd_remove "${args[@]}" ;;
+    help)     usage ;;
+    *) usage >&2; die "$(t err.unknownCommand "$cmd")" ;;
+  esac
+}
+
+main "$@"

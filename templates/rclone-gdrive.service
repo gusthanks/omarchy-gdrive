@@ -1,0 +1,28 @@
+# Managed by omarchy-gdrive. Re-run `omarchy-gdrive setup` to regenerate.
+# Remove the line above if you want to take this file over by hand.
+[Unit]
+Description=@@DISPLAY_NAME@@ (rclone mount)
+Documentation=https://github.com/gusthanks/omarchy-gdrive man:rclone(1)
+After=network-online.target
+Wants=network-online.target
+AssertPathIsDirectory=@@MOUNTPOINT@@
+
+[Service]
+Type=notify
+# A mount point left behind by a crash blocks the next mount; clear it first.
+ExecStartPre=-/usr/bin/fusermount3 -uz @@MOUNTPOINT@@
+ExecStart=/usr/bin/rclone mount @@REMOTE@@: @@MOUNTPOINT@@ \
+    --vfs-cache-mode full \
+    --vfs-cache-max-size @@CACHE_MAX_SIZE@@ \
+    --vfs-cache-max-age 72h \
+    --vfs-cache-min-free-space 2G \
+    --dir-cache-time 72h \
+    --poll-interval 1m \
+    --umask 022 \
+    --log-level NOTICE
+ExecStop=/usr/bin/fusermount3 -uz @@MOUNTPOINT@@
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
