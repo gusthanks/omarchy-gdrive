@@ -5,9 +5,9 @@
 #
 # The live plugin folder is expected to be a git checkout (what
 # `omarchy plugin add <url>` makes); it is fast-forwarded to this repo's HEAD.
-# Uncommitted edits in the live folder are dropped only when HEAD already
-# contains exactly those changes (files copied in by hand); anything else
-# stops the deploy. A plain copy (no .git) is moved to
+# Uncommitted edits in the live folder are dropped only when they are an
+# exact copy of a commit that HEAD already contains (files copied in by
+# hand); anything else stops the deploy. A plain copy (no .git) is moved to
 # ~/Work/backups/<plugin-id>.<timestamp> and replaced by a checkout.
 set -euo pipefail
 
@@ -26,10 +26,15 @@ if [[ -d $live/.git ]]; then
   git -C "$live" fetch -q "$repo" "$branch"
   dirty=$(git -C "$live" diff --name-only HEAD)
   if [[ -n $dirty ]]; then
-    # Hand-copied files that already match the new HEAD are safe to reset.
-    if git -C "$live" diff --quiet FETCH_HEAD -- $dirty; then
+    # Files copied in by hand from a commit that $branch already contains
+    # (the live tree matches that commit for those paths) are safe to reset.
+    match=""
+    for c in $(git -C "$live" rev-list HEAD..FETCH_HEAD); do
+      if git -C "$live" diff --quiet "$c" -- $dirty; then match=$c; break; fi
+    done
+    if [[ -n $match ]]; then
       git -C "$live" checkout -q -- $dirty
-      echo "Live edits in $(echo $dirty) already match $branch; reset them before fast-forwarding."
+      echo "Live edits in $(echo $dirty) match $(git -C "$live" log --oneline -1 "$match"); reset them before fast-forwarding."
     else
       echo "The live plugin has edits that are not in $branch:" >&2
       git -C "$live" diff --stat FETCH_HEAD -- $dirty >&2

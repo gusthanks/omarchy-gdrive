@@ -42,8 +42,8 @@ When ALL the requested work is finished, tested in the harness and committed:
 dev/deploy.sh   # validates, compiles, fast-forwards the live checkout to HEAD, restarts the shell once
 ```
 
-The live plugin is a git checkout of this repo; deploy fast-forwards it (hand-copied edits
-there are dropped only when HEAD already has exactly those changes). The shell's hot
+The live plugin is a git checkout of this repo; deploy fast-forwards it (uncommitted edits
+there are dropped only when they are an exact copy of a commit HEAD already contains). The shell's hot
 reload is not reliable for plugins (the old version can stay on screen), so the deploy
 always ends with one `omarchy restart shell`. Do not tell the user something is done before
 this ran. Never use `omarchy refresh shell` (it resets the bar layout). Never deploy or
