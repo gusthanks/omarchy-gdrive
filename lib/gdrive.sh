@@ -29,6 +29,10 @@ provider_network_ok() {
   curl -sS -m 5 -o /dev/null -w '%{http_code}' "$GDRIVE_API_PROBE_URL" 2>/dev/null | grep -qE '^[1-5][0-9][0-9]$'
 }
 
+# The same test, as a jq filter on the remote's config object, for the cached
+# status poll (status_remote_facts). Keep the two in step.
+PROVIDER_OWN_CLIENT_JQ='((.client_id // "") != "" and (.client_secret // "") != "")'
+
 # 0 when the remote carries its own client_id (and secret), 1 when it relies
 # on rclone's shared one.
 provider_own_credentials() {

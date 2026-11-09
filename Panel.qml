@@ -24,7 +24,7 @@ Panel {
   // ---- Settings (shell.json entry) ----
   // leftClick: "open" (default, opens the folder) or "panel" (opens this menu).
   readonly property string leftClick: String(setting("leftClick", "open")) === "panel" ? "panel" : "open"
-  readonly property int pollSeconds: Math.max(3, parseInt(setting("pollSeconds", 10), 10) || 10)
+  readonly property int pollSeconds: Math.max(3, parseInt(setting("pollSeconds", 15), 10) || 15)
 
   // ---- Paths ----
   readonly property string home: Quickshell.env("HOME")

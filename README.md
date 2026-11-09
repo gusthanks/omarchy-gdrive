@@ -92,6 +92,8 @@ Prefer the menu on left click? In `~/.config/omarchy/shell.json`:
 { "id": "gusthx.gdrive", "leftClick": "panel" }
 ```
 
+The widget refreshes every 15 s (every 4 s while the menu is open); set `"pollSeconds"` to change it (minimum 3). Each refresh is cheap: `status` reads the rclone config only when `rclone.conf` changed, and keeps just two yes/no facts (remote exists, own client) in `$XDG_RUNTIME_DIR`, never a token.
+
 IPC: `quickshell -p /usr/share/omarchy/shell ipc call gusthx.gdrive toggle` (also `open`, `close`, `refresh`, `openFolder`, `toggleMount`).
 
 ## Layout

@@ -190,6 +190,33 @@ remote_option() {
 }
 remote_type() { remote_option type; }
 
+# status_remote_facts — "<exists>\t<own client>" (yes/no each) for the status
+# poll. The bar asks for status every few seconds and each rclone start costs
+# ~0.1 s of CPU on a slow laptop, so this runs one `rclone config dump` only
+# when rclone.conf (or an RCLONE_CONFIG_* variable) changed, and keeps the
+# answer in $XDG_RUNTIME_DIR (RAM, private, gone on reboot). Only the two
+# yes/no facts are stored — never a token, id or secret. setup/doctor/remove
+# keep reading the config directly.
+: "${PROVIDER_OWN_CLIENT_JQ:=false}"   # jq test on the remote's object; set per provider
+status_remote_facts() {
+  local dir="${XDG_RUNTIME_DIR:-$CACHE_HOME}/$CLI_NAME" file key facts cached_key
+  file="$dir/status-remote"
+  key=$( { printf '%s\n%s\n' "$REMOTE" "$PROVIDER_OWN_CLIENT_JQ"
+           stat -Lc '%i %s %y' "$RCLONE_CONF" 2>/dev/null
+           env | grep '^RCLONE_CONFIG' | sort; } | cksum | cut -d' ' -f1)
+  if [[ -r $file ]] && { read -r cached_key; read -r facts; } <"$file" && [[ $cached_key == "$key" && -n $facts ]]; then
+    printf '%s' "$facts"; return 0
+  fi
+  facts=$(rclone config dump 2>/dev/null | jq -r --arg r "$REMOTE" "
+    if has(\$r) then [\"yes\", (.[\$r] | if ($PROVIDER_OWN_CLIENT_JQ) then \"yes\" else \"no\" end)]
+    else [\"no\", \"no\"] end | @tsv") || facts=""
+  [[ $facts == *$'\t'* ]] || { printf 'no\tno'; return 0; }   # rclone/jq failed: report, don't cache
+  if mkdir -p -m 700 "$dir" 2>/dev/null; then
+    ( umask 077; printf '%s\n%s\n' "$key" "$facts" >"$file.$$" && mv -f "$file.$$" "$file" ) 2>/dev/null
+  fi
+  printf '%s' "$facts"
+}
+
 # A real round trip with a short budget: proves the token (and the network) work.
 REMOTE_TOKEN_ERROR=""
 remote_token_ok() {
@@ -419,9 +446,12 @@ cmd_status() {
   local rclone_ok=false remote_ok=false unit_ok=false own=false enabled=false mounted=false responsive=false
   local active sub cache_b cache_max cache_max_b pending last_err state managed
   have rclone && rclone_ok=true
-  [[ $rclone_ok == true ]] && remote_exists && remote_ok=true
+  if [[ $rclone_ok == true ]]; then
+    local facts; facts=$(status_remote_facts)
+    [[ ${facts%%$'\t'*} == yes ]] && remote_ok=true
+    [[ $remote_ok == true && ${facts##*$'\t'} == yes ]] && own=true
+  fi
   unit_exists && unit_ok=true
-  [[ $remote_ok == true ]] && provider_own_credentials && own=true
   service_enabled && enabled=true
   active=$(service_active_state); sub=$(service_sub_state)
   mount_active && mounted=true
