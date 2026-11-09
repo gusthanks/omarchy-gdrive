@@ -23,6 +23,8 @@ GDRIVE_API_PROBE_URL="https://www.googleapis.com/discovery/v1/apis"
 # Options parsed from the command line by cmd_setup.
 GDRIVE_CREDENTIALS_FILE=""
 GDRIVE_ACCEPT_SHARED=0
+# The client_secret_*.json the credentials came from, if any (for a hint to delete it).
+GDRIVE_CREDENTIALS_SOURCE=""
 
 provider_network_ok() {
   # Any HTTP answer (even 4xx) proves we can reach Google; -f would hide that.
@@ -81,13 +83,13 @@ gdrive_read_credentials() {
   local file=$1
   GDRIVE_CLIENT_ID=$(jq -r '(.installed // .web // .) | .client_id // empty' "$file" 2>/dev/null)
   GDRIVE_CLIENT_SECRET=$(jq -r '(.installed // .web // .) | .client_secret // empty' "$file" 2>/dev/null)
-  [[ -n $GDRIVE_CLIENT_ID && -n $GDRIVE_CLIENT_SECRET ]]
+  [[ -n $GDRIVE_CLIENT_ID && -n $GDRIVE_CLIENT_SECRET ]] && GDRIVE_CREDENTIALS_SOURCE=$file
 }
 
 # Interactive: returns 0 with GDRIVE_CLIENT_ID/SECRET set, or 1 when the user
 # chose to continue with rclone's shared client.
 gdrive_obtain_credentials() {
-  GDRIVE_CLIENT_ID=""; GDRIVE_CLIENT_SECRET=""
+  GDRIVE_CLIENT_ID=""; GDRIVE_CLIENT_SECRET=""; GDRIVE_CREDENTIALS_SOURCE=""
 
   if [[ -n $GDRIVE_CREDENTIALS_FILE ]]; then
     gdrive_read_credentials "$GDRIVE_CREDENTIALS_FILE" || die "$(t gdrive.creds.badFile "$GDRIVE_CREDENTIALS_FILE")"
@@ -103,7 +105,7 @@ gdrive_obtain_credentials() {
       ok "$(t gdrive.creds.loaded "$found")"
       return 0
     fi
-    GDRIVE_CLIENT_ID=""; GDRIVE_CLIENT_SECRET=""
+    GDRIVE_CLIENT_ID=""; GDRIVE_CLIENT_SECRET=""; GDRIVE_CREDENTIALS_SOURCE=""
   fi
 
   if ! interactive; then
@@ -138,19 +140,30 @@ gdrive_obtain_credentials() {
   done
 }
 
-# Writes client_secret into the remote's stanza without passing it on a command
-# line (so it never shows up in `ps` or shell history). rclone.conf is a plain
-# INI file; the line goes right under the [remote] header.
+# Writes client_secret into the remote's stanza without putting it on any
+# command line (so it never shows up in `ps`, /proc/<pid>/cmdline or shell
+# history): awk gets it through its environment (/proc/<pid>/environ is
+# readable only by you), and ENVIRON keeps backslashes as they are, unlike
+# `awk -v`. rclone.conf is a plain INI file; the line goes right under the
+# [remote] header. The temp file is created mode 600 next to rclone.conf and
+# removed if anything fails.
 gdrive_set_client_secret() {
   local secret=$1 tmp
-  [[ -f $RCLONE_CONF ]] || return 1
-  tmp=$(mktemp "$(dirname "$RCLONE_CONF")/.rclone.conf.XXXXXX")
-  awk -v r="[$REMOTE]" -v line="client_secret = $secret" '
-    { if (in_r && $0 ~ /^client_secret *=/) next; print }
-    $0 == r { print line; in_r = 1; next }
-    /^\[/ { in_r = 0 }
-  ' "$RCLONE_CONF" > "$tmp" && mv -f "$tmp" "$RCLONE_CONF"
-  chmod 600 "$RCLONE_CONF"
+  [[ -f $RCLONE_CONF && -n $secret ]] || return 1
+  # A newline would let the value write extra lines into rclone.conf.
+  [[ $secret != *[$'\n\r']* ]] || return 1
+  tmp=$(umask 077; mktemp "$(dirname "$RCLONE_CONF")/.rclone.conf.XXXXXX") || return 1
+  if GDRIVE_SECRET_LINE="client_secret = $secret" GDRIVE_REMOTE_HEADER="[$REMOTE]" awk '
+      BEGIN { r = ENVIRON["GDRIVE_REMOTE_HEADER"]; line = ENVIRON["GDRIVE_SECRET_LINE"] }
+      { if (in_r && $0 ~ /^client_secret *=/) next; print }
+      $0 == r { print line; in_r = 1; next }
+      /^\[/ { in_r = 0 }
+    ' "$RCLONE_CONF" > "$tmp" && mv -f "$tmp" "$RCLONE_CONF"; then
+    chmod 600 "$RCLONE_CONF"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
 }
 
 # Create (or re-credential) the remote, then run Google's OAuth flow in the browser.
@@ -167,6 +180,9 @@ provider_create_remote() {
     gdrive_set_client_secret "$GDRIVE_CLIENT_SECRET" || die "$(t gdrive.creds.writeFailed "$RCLONE_CONF")"
     GDRIVE_CLIENT_SECRET=""
     ok "$(t gdrive.creds.saved "$REMOTE")"
+    # Google's download keeps a second copy of the secret, usually readable by
+    # every local user (umask 022). It is not needed any more.
+    [[ -n $GDRIVE_CREDENTIALS_SOURCE && -f $GDRIVE_CREDENTIALS_SOURCE ]] && info "$(t gdrive.creds.deleteJson "$GDRIVE_CREDENTIALS_SOURCE")"
   elif (( ! had_remote )); then
     rclone config create "$REMOTE" "$BACKEND_TYPE" scope="$GDRIVE_SCOPE" --non-interactive >/dev/null 2>&1
   fi

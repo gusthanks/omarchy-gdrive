@@ -118,6 +118,7 @@
   "gdrive.creds.sharedWarning": "Using rclone's shared client_id. Expect throttling, and re-run 'omarchy-gdrive setup --client' before it is retired.",
   "gdrive.creds.writeFailed": "Could not write the client secret into %1",
   "gdrive.creds.saved": "Saved your OAuth client into remote '%1'",
+  "gdrive.creds.deleteJson": "%1 still holds a copy of the client secret. rclone.conf has it now, so you can delete that file.",
   "gdrive.creds.existingShared": "Remote '%1' still relies on rclone's shared client_id.",
   "gdrive.creds.upgradeNow": "Switch to your own client_id now? (opens the browser once to log in again)",
   "gdrive.creds.upgradeLater": "Fine — do it any time with: %1 setup --client",

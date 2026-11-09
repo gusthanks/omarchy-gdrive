@@ -177,6 +177,17 @@ save_state() {
   } > "$STATE_FILE"
 }
 
+# redact_secrets — stdin → stdout with OAuth tokens and client secrets masked.
+# rclone does not log them at NOTICE level, but an error line can quote a
+# config value or an HTTP body, and these lines end up on screen.
+redact_secrets() {
+  sed -E \
+    -e 's/("?(access_token|refresh_token|client_secret|id_token)"?[[:space:]]*[:=][[:space:]]*"?)[^",}[:space:]]+/\1[redacted]/g' \
+    -e 's/ya29\.[A-Za-z0-9._-]+/[redacted]/g' \
+    -e 's#1//[A-Za-z0-9._-]{20,}#[redacted]#g' \
+    -e 's/GOCSPX-[A-Za-z0-9_-]+/[redacted]/g'
+}
+
 # ---------------------------------------------------------------------------
 # rclone remote helpers (never print the token)
 # ---------------------------------------------------------------------------
@@ -224,7 +235,7 @@ remote_token_ok() {
   out=$(timeout 45 rclone lsjson "$REMOTE:" --max-depth 1 --contimeout 10s --timeout 30s --low-level-retries 3 --retries 2 2>&1 >/dev/null)
   local rc=$?
   # rclone's error lines never contain the token; keep a one-line reason for doctor.
-  REMOTE_TOKEN_ERROR=$(grep -vE 'shared Google Drive client_id|^\s*[]},]*\s*$' <<<"$out" | grep -E 'ERROR|CRITICAL|Failed|rateLimit|invalid_grant|token' | tail -n 1 | sed -E 's/^[0-9/ :]+ (ERROR|CRITICAL|NOTICE) ?:? ?//' | cut -c1-160)
+  REMOTE_TOKEN_ERROR=$(grep -vE 'shared Google Drive client_id|^\s*[]},]*\s*$' <<<"$out" | grep -E 'ERROR|CRITICAL|Failed|rateLimit|invalid_grant|token' | tail -n 1 | sed -E 's/^[0-9/ :]+ (ERROR|CRITICAL|NOTICE) ?:? ?//' | redact_secrets | cut -c1-160)
   REMOTE_TOKEN_KIND=ok
   if (( rc != 0 )); then
     if grep -qiE 'rateLimitExceeded|userRateLimitExceeded|quotaExceeded|429' <<<"$out"; then REMOTE_TOKEN_KIND=throttled
@@ -279,8 +290,10 @@ service_sub_state()    { systemctl_user show -p SubState --value "$SERVICE.servi
 service_enabled()      { systemctl_user is-enabled "$SERVICE.service" >/dev/null 2>&1; }
 service_result()       { systemctl_user show -p Result --value "$SERVICE.service" 2>/dev/null || echo ""; }
 
+# The last error goes into `status --json` (shown in the bar popup) and into
+# doctor's output, so scrub anything that looks like a credential first.
 service_last_error() {
-  journalctl --user -u "$SERVICE.service" -p err -n 1 -o cat --no-pager 2>/dev/null | tail -n 1
+  journalctl --user -u "$SERVICE.service" -p err -n 1 -o cat --no-pager 2>/dev/null | tail -n 1 | redact_secrets
 }
 
 # 10 % of the free space on the disk that holds the cache, clamped to 2–50 GiB.
