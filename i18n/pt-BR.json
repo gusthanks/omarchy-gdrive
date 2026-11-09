@@ -24,6 +24,7 @@
   "quota.loading": "Perguntando ao Google…",
   "quota.unavailable": "Indisponível enquanto pausado",
   "error.title": "ÚLTIMO ERRO",
+  "error.statusFailed": "omarchy-gdrive status falhou (código de saída %1)",
   "action.open": "Abrir pasta",
   "action.logs": "Logs",
   "action.doctor": "Doctor",

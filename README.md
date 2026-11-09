@@ -23,20 +23,22 @@
 - **`omarchy-gdrive doctor`** — tools, config permissions, remote, own vs. shared `client_id`, network, token, unit, mount, cache, pending uploads, bookmark. Says what to run to fix each thing. `--fix` applies the safe ones.
 - **`status`, `start`, `stop`, `restart`, `logs`, `quota`, `open`, `remove`** — and `status --json` for machines.
 - **Bar widget** — state icon (mounted / paused / problem), pending-upload badge, popup with cache usage, Drive quota, pause/resume switch, logs and doctor buttons. Follows the Omarchy theme live. Click opens `~/GoogleDrive`.
-- **No secrets in the wrong place.** The `client_secret` is written straight into `~/.config/rclone/rclone.conf` (mode 600), never passed on a command line, never logged, never shown in the widget.
+- **No secrets in the wrong place.** The `client_secret` is written straight into `~/.config/rclone/rclone.conf` (mode 600), never passed on a command line, never logged, never shown in the widget. See [Privacy and security](#privacy-and-security).
 - **English and Portuguese**, following the Omarchy language setting (falls back to `$LANG`).
 
 <p align="center">
-  <img src="assets/panel.png" alt="Google Drive popup: state, cache, quota, actions" width="70%" />
+  <img src="docs/panel.png" alt="Google Drive popup: mounted, local cache, three files waiting to upload, Drive storage, actions" width="48%" />
+  <img src="docs/panel-error.png" alt="The popup with a problem: the token was revoked, last error shown" width="48%" />
 </p>
 <p align="center">
-  <img src="assets/bar.png" alt="Bar pill" />
+  <img src="docs/bar.png" alt="Bar pill: Drive icon with three uploads pending" width="40%" />
 </p>
+<p align="center"><sub>Screenshots use mock data from the dev harness (<code>dev/run.sh docs</code>), not a real account.</sub></p>
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/gusthanks/omarchy-gdrive --enable
+omarchy plugin add https://github.com/gusthanks/omarchy-gdrive.git --enable
 ~/.config/omarchy/plugins/gusthx.gdrive/bin/omarchy-gdrive setup
 ```
 
@@ -105,16 +107,63 @@ IPC: `quickshell -p /usr/share/omarchy/shell ipc call gusthx.gdrive toggle` (als
 | `lib/gdrive.sh` | Google Drive: OAuth client handling, shared-client detection, quota |
 | `lib/i18n.sh`, `i18n/cli/*.json` | CLI messages (en, pt-BR) |
 | `templates/rclone-gdrive.service` | The unit `setup` renders |
-| `Panel.qml`, `Model.js`, `i18n/*.json` | Bar widget |
-| `docs/` | The `client_id` guide in both languages |
+| `Panel.qml` | Bar widget: runs the CLI, holds the state, the pill and the popup frame |
+| `DriveView.qml` | The popup content (reads everything from a `drive` object) |
+| `Model.js`, `i18n/*.json` | Widget helpers and strings (the plugin's own catalog: en, pt, pt-BR) |
+| `dev/` | Isolated dev harness with mock data, tests, deploy script |
+| `docs/` | The `client_id` guide in both languages, screenshots |
 
 The split is deliberate: `common.sh` only knows about "an rclone remote mounted by a user unit", so a `omarchy-cloud-drive` for OneDrive, Dropbox or S3 is a second provider module away.
 
-## Testing
+## Privacy and security
+
+omarchy-gdrive has no server of its own and no telemetry. Your files go between your machine and Google, through rclone.
+
+**What is stored where**
+
+| Path | What | Permissions |
+|---|---|---|
+| `~/.config/rclone/rclone.conf` | The remote: `client_id`, `client_secret` and the OAuth token (written by rclone and by `setup`) | file `600`, folder `700`; `setup` and `doctor --fix` enforce it |
+| `~/.config/omarchy-gdrive/config` | Remote name, mount point, unit name, adopted or managed. No secrets | your umask |
+| `~/.config/systemd/user/rclone-gdrive.service` | The mount unit. No secrets | your umask |
+| `~/.cache/rclone/vfs/<remote>/`, `vfsMeta/` | rclone's local copies of files you opened or saved, until they are uploaded and age out (72 h, size capped) | `700` (rclone creates them private) |
+| `$XDG_RUNTIME_DIR/omarchy-gdrive/status-remote` | Two yes/no facts for the bar (remote exists, own client) and a checksum. Never a token, id or secret. RAM only, gone on reboot | folder `700`, file `600` |
+| `~/.config/gtk-3.0/bookmarks` | One line for the file manager sidebar | unchanged |
+| `~/.local/bin/omarchy-gdrive` | A symlink to the CLI | — |
+| the user journal | rclone's log at `NOTICE` level (errors may name files on your Drive) | your journal |
+
+**How the secret is handled**
+
+- You type the `client_secret` with input hidden, or `setup` reads it from the `client_secret_*.json` you downloaded.
+- It is written into `rclone.conf` through a temp file created mode `600` next to it. It is never put on a command line (so it does not show in `ps` or shell history), never logged and never shown in the widget. After using a downloaded JSON, `setup` reminds you that the file still holds a copy you can delete.
+- The `client_id` is passed to `rclone config create/update` as an argument. It is a public identifier, not a secret.
+- `status --json` (what the widget reads) carries no token, id or secret. The last error line from the journal is scrubbed of anything that looks like a token or secret before it is shown.
+- `remove` deletes the remote (and its token) from `rclone.conf` after asking. To revoke access on Google's side too, use [Google Account → Security → Third-party connections](https://myaccount.google.com/connections).
+
+**Hosts contacted**
+
+| Host | By | When |
+|---|---|---|
+| `www.googleapis.com` | rclone | the mount, `quota` (when the popup opens, at most every 15 min), `doctor` |
+| `oauth2.googleapis.com`, `accounts.google.com` | rclone, your browser | sign-in and token refresh |
+| `127.0.0.1:53682` | rclone, your browser | only during sign-in: rclone's local page that receives Google's answer |
+| `www.googleapis.com/discovery/v1/apis` | `doctor` (curl) | a reachability probe; sends nothing about you |
+| your Arch mirrors | `pacman` | only if `rclone`, `fuse3` or `jq` are missing, after asking |
+
+The bar widget itself makes no network requests: it runs `omarchy-gdrive status --json` (local only: systemd, the mount, the cache folder) and `quota --json`.
+
+Nothing here runs as root except that `pacman` call. The mount is only visible to you (no `allow_other`).
+
+## Development
+
+Never develop on the live copy in `~/.config/omarchy/plugins/`; see [AGENTS.md](AGENTS.md).
 
 ```bash
-node --test Model.test.js        # widget helpers
-bash -n bin/omarchy-gdrive lib/*.sh
+dev/run.sh test      # Model.js, i18n catalogs, client-secret writer, bash -n
+dev/run.sh check     # compile every QML type, Panel.qml included
+dev/run.sh docs      # regenerate docs/*.png from mock data (offscreen)
+dev/run.sh preview   # the popup in a window, mock data
+dev/deploy.sh        # fast-forward the installed plugin to HEAD, restart the shell once
 ```
 
 ## Uninstall
@@ -133,13 +182,13 @@ omarchy plugin remove gusthx.gdrive
 Se você já montou o Drive à mão com a sua própria `rclone-gdrive.service`, o `setup` detecta e oferece **adotar** sem mexer em nada (padrão) ou substituir pelo template.
 
 ```bash
-omarchy plugin add https://github.com/gusthanks/omarchy-gdrive --enable
+omarchy plugin add https://github.com/gusthanks/omarchy-gdrive.git --enable
 ~/.config/omarchy/plugins/gusthx.gdrive/bin/omarchy-gdrive setup
 ```
 
 Por que o seu próprio `client_id`? O rclone vem com um client_id compartilhado por todos os usuários do mundo: o Google limita a velocidade dele e vai **aposentá-lo em 2026**. Criar o seu leva cinco minutos e é grátis: **[guia passo a passo em português](docs/own-client-id.pt-BR.md)**. Já tem o mount com o cliente compartilhado? `omarchy-gdrive setup --client` troca no lugar.
 
-A interface (CLI e widget) segue o idioma do Omarchy (`omarchy language`), com fallback para `$LANG`. Nenhum segredo passa pela linha de comando, pelos logs ou pelo widget: o `client_secret` vai direto para `~/.config/rclone/rclone.conf` (modo 600).
+A interface (CLI e widget) segue o idioma do Omarchy (`omarchy language`), com fallback para `$LANG`. Nenhum segredo passa pela linha de comando, pelos logs ou pelo widget: o `client_secret` vai direto para `~/.config/rclone/rclone.conf` (modo 600). Detalhes do que fica onde e de quais servidores são contatados em [Privacy and security](#privacy-and-security).
 
 ## License
 

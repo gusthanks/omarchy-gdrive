@@ -24,6 +24,7 @@
   "quota.loading": "Asking Google…",
   "quota.unavailable": "Not available while paused",
   "error.title": "LAST ERROR",
+  "error.statusFailed": "omarchy-gdrive status failed (exit code %1)",
   "action.open": "Open folder",
   "action.logs": "Logs",
   "action.doctor": "Doctor",

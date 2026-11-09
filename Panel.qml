@@ -8,8 +8,9 @@ import "Model.js" as Model
 
 // Google Drive bar widget for Omarchy. All state comes from the bundled CLI
 // (`bin/omarchy-gdrive status --json`); this file only draws it and forwards
-// actions. Secrets never pass through here: the CLI reads rclone's config
-// itself and the JSON it prints carries no token.
+// actions; the popup content is DriveView.qml. Secrets never pass through
+// here: the CLI reads rclone's config itself and the JSON it prints carries
+// no token, id or secret (the last error line is scrubbed too).
 Panel {
   id: root
   moduleName: "gusthx.gdrive"
@@ -52,6 +53,7 @@ Panel {
   function fmtNum(v, d) { return Commons.I18n.formatNumber(v, d) }
   function fmtBytes(b, d) { return Model.formatBytes(b, d === undefined ? 1 : d, fmtNum) }
   function stateText(s) { return tr.t("state." + (s || "unknown")) }
+  function t(key) { return tr.t(key) }
 
   readonly property string barDisplayText: Model.barText(st)
   readonly property string barTooltip: {
@@ -116,7 +118,7 @@ Panel {
     onExited: function(code) {
       // The CLI exits 1 when not mounted; that is still valid JSON. Anything
       // worse (missing bash, broken checkout) leaves the last good state.
-      if (code > 1 && root.st.state === "unknown") root.st = Object.assign(Model.emptyStatus(), { state: "error", lastError: "omarchy-gdrive status failed (" + code + ")" })
+      if (code > 1 && root.st.state === "unknown") root.st = Object.assign(Model.emptyStatus(), { state: "error", lastError: tr.t("error.statusFailed").arg(code) })
     }
   }
 
@@ -224,274 +226,13 @@ Panel {
         else if (t === "s" || t === "S") { if (!root.configured) root.openSetup() }
       }
 
-      Column {
+      DriveView {
         id: mainColumn
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        spacing: Style.space(12)
-
-        // ---- Hero: icon, title, state, mount switch ----
-        Item {
-          width: parent.width
-          implicitHeight: Math.max(heroRow.implicitHeight, mountSwitch.implicitHeight)
-
-          Row {
-            id: heroRow
-            anchors.left: parent.left
-            anchors.right: mountSwitch.left
-            anchors.rightMargin: Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.space(12)
-
-            PlainText {
-              text: Model.stateIcon(root.state)
-              color: root.state === "error" ? root.urgentColor : (root.mountedish ? root.fgColor : root.dimColor)
-              font.pixelSize: Style.font.display
-              anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Column {
-              width: Math.max(Style.space(100), parent.width - Style.space(44))
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              PlainText {
-                text: tr.t("title")
-                font.pixelSize: Style.font.title
-                font.bold: true
-                width: parent.width
-              }
-
-              PlainText {
-                text: {
-                  if (!root.configured) return root.stateText(root.state) + " · " + tr.t("hero.setupHint")
-                  var where = root.st.mountpoint ? tr.t("hero.mountedAt").arg(Model.shortenHome(root.st.mountpoint, root.home)) : ""
-                  return root.stateText(root.state) + (where ? " " + where : "")
-                }
-                color: root.state === "error" ? root.urgentColor : root.dimColor
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                width: parent.width
-              }
-            }
-          }
-
-          ToggleSwitch {
-            id: mountSwitch
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.configured
-            checked: root.mountedish
-            busy: root.busy || root.state === "starting"
-            foreground: root.fgColor
-            accent: root.accentColor
-            onToggled: root.toggleMount()
-          }
-        }
-
-        PanelSeparator { width: parent.width; foreground: root.fgColor }
-
-        // ---- Shared client warning ----
-        PlainText {
-          visible: root.configured && root.st.ownClient === false
-          width: parent.width
-          wrapMode: Text.WordWrap
-          text: "󰀦 " + tr.t("sharedClient")
-          color: root.urgentColor
-          font.pixelSize: Style.font.caption
-        }
-
-        // ---- Local cache ----
-        Column {
-          width: parent.width
-          spacing: Style.space(6)
-          visible: root.configured
-
-          Row {
-            width: parent.width
-            PanelSectionHeader {
-              text: tr.t("cache.title")
-              foreground: root.fgColor
-              fontFamily: root.fontFamily
-              width: parent.width - cacheValue.implicitWidth
-            }
-            PlainText {
-              id: cacheValue
-              text: root.st.cacheMaxBytes > 0
-                ? tr.t("cache.usage").arg(root.fmtBytes(root.st.cacheBytes)).arg(root.fmtBytes(root.st.cacheMaxBytes, 0))
-                : tr.t("cache.usageUnlimited").arg(root.fmtBytes(root.st.cacheBytes))
-              color: root.dimColor
-              font.pixelSize: Style.font.caption
-            }
-          }
-
-          ProgressTrack {
-            width: parent.width
-            value: Model.percent(root.st.cacheBytes, root.st.cacheMaxBytes)
-            fill: value >= 90 ? root.urgentColor : root.accentColor
-          }
-
-          PlainText {
-            width: parent.width
-            text: root.st.pendingUploads > 0
-              ? "󰅧 " + tr.t("cache.pending").arg(root.fmtNum(root.st.pendingUploads))
-              : tr.t("cache.clean")
-            color: root.st.pendingUploads > 0 ? root.fgColor : root.dimColor
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        // ---- Drive quota ----
-        Column {
-          width: parent.width
-          spacing: Style.space(6)
-          visible: root.configured
-
-          Row {
-            width: parent.width
-            PanelSectionHeader {
-              text: tr.t("quota.title")
-              foreground: root.fgColor
-              fontFamily: root.fontFamily
-              width: parent.width - quotaValue.implicitWidth
-            }
-            PlainText {
-              id: quotaValue
-              text: {
-                if (root.quota) return tr.t("quota.usage").arg(root.fmtBytes(root.quota.used)).arg(root.fmtBytes(root.quota.total, 0))
-                if (!root.mountedish) return tr.t("quota.unavailable")
-                return root.quotaLoading ? tr.t("quota.loading") : "—"
-              }
-              color: root.dimColor
-              font.pixelSize: Style.font.caption
-            }
-          }
-
-          ProgressTrack {
-            width: parent.width
-            value: root.quota ? Model.percent(root.quota.used, root.quota.total) : 0
-            fill: value >= 90 ? root.urgentColor : root.accentColor
-          }
-        }
-
-        // ---- Last error ----
-        Column {
-          width: parent.width
-          spacing: Style.space(4)
-          visible: root.state === "error" && root.st.lastError !== ""
-
-          PanelSectionHeader {
-            text: tr.t("error.title")
-            foreground: root.urgentColor
-            fontFamily: root.fontFamily
-            width: parent.width
-          }
-          PlainText {
-            width: parent.width
-            wrapMode: Text.WrapAnywhere
-            maximumLineCount: 4
-            elide: Text.ElideRight
-            text: Model.neutralizeMarkup(root.st.lastError, 320)
-            color: root.dimColor
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        PanelSeparator { width: parent.width; foreground: root.fgColor }
-
-        // ---- Actions ----
-        Flow {
-          width: parent.width
-          spacing: Style.space(6)
-
-          ActionBtn {
-            visible: !root.configured
-            iconText: "󰒓"   // md-cog
-            text: tr.t("action.setup")
-            tooltipText: tr.t("action.tooltip.setup")
-            onClicked: root.openSetup()
-          }
-          ActionBtn {
-            iconText: "󰝰"   // md-folder-open
-            text: tr.t("action.open")
-            tooltipText: tr.t("action.tooltip.open")
-            onClicked: root.openFolder()
-          }
-          ActionBtn {
-            visible: root.configured
-            iconText: root.mountedish ? "󰏤" : "󰐊"  // md-pause / md-play
-            text: root.mountedish ? tr.t("action.pause") : tr.t("action.resume")
-            tooltipText: root.mountedish ? tr.t("action.tooltip.pause") : tr.t("action.tooltip.resume")
-            enabled: !root.busy
-            onClicked: root.toggleMount()
-          }
-          ActionBtn {
-            iconText: "󰆍"   // md-console
-            text: tr.t("action.logs")
-            tooltipText: tr.t("action.tooltip.logs")
-            onClicked: root.openLogs()
-          }
-          ActionBtn {
-            iconText: "󰓜"   // md-stethoscope
-            text: tr.t("action.doctor")
-            tooltipText: tr.t("action.tooltip.doctor")
-            onClicked: root.openDoctor()
-          }
-          ActionBtn {
-            iconText: "󰑐"   // md-refresh
-            tooltipText: tr.t("action.tooltip.refresh")
-            onClicked: { root.refresh(); root.refreshQuota(true) }
-          }
-        }
-
-        PlainText {
-          width: parent.width
-          text: tr.t("hint.keys")
-          color: root.dimColor
-          font.pixelSize: Style.font.caption
-          wrapMode: Text.WordWrap
-          horizontalAlignment: Text.AlignHCenter
-        }
+        drive: root
       }
-    }
-  }
-
-  // ---- Small reusable pieces ----
-  component PlainText: Text {
-    color: root.fgColor
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.body
-    textFormat: Text.PlainText
-    elide: Text.ElideRight
-  }
-
-  component ActionBtn: Button {
-    fontSize: Style.font.caption
-    iconSize: Style.font.bodySmall
-    foreground: root.fgColor
-    accent: root.accentColor
-    fontFamily: root.fontFamily
-    horizontalPadding: Style.space(8)
-    verticalPadding: Style.space(5)
-    bordered: true
-  }
-
-  component ProgressTrack: Item {
-    property real value: 0      // 0..100
-    property color fill: root.accentColor
-    implicitHeight: Style.space(6)
-    Rectangle {
-      anchors.fill: parent
-      radius: height / 2
-      color: root.trackColor
-    }
-    Rectangle {
-      width: Math.max(0, Math.min(1, parent.value / 100)) * parent.width
-      height: parent.height
-      radius: height / 2
-      color: parent.fill
-      Behavior on width { NumberAnimation { duration: 180 } }
     }
   }
 }

@@ -1,11 +1,11 @@
-// Run with: node --test Model.test.js
+// Run with: dev/run.sh test  (or node --test dev/tests/)
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import vm from "node:vm"
 
 // Model.js is a QML JavaScript library (".pragma library"); evaluate it in a sandbox.
-const src = readFileSync(new URL("./Model.js", import.meta.url), "utf8").replace(/^\.pragma library\s*/, "")
+const src = readFileSync(new URL("../../Model.js", import.meta.url), "utf8").replace(/^\.pragma library\s*/, "")
 const M = {}
 vm.runInNewContext(src + "\nthis.parseStatus = parseStatus; this.parseQuota = parseQuota; this.barText = barText; this.stateIcon = stateIcon; this.isUrgent = isUrgent; this.percent = percent; this.formatBytes = formatBytes; this.shortenHome = shortenHome; this.shellQuote = shellQuote; this.neutralizeMarkup = neutralizeMarkup; this.emptyStatus = emptyStatus", M)
 
@@ -66,4 +66,37 @@ test("shortenHome", () => {
 test("shellQuote and neutralizeMarkup", () => {
   assert.equal(M.shellQuote("a'b"), "'a'\\''b'")
   assert.equal(M.neutralizeMarkup("<b>hi</b>   there", 8), "b hi /b…")
+})
+
+// ---- i18n catalogs (the widget's i18n/*.json and the CLI's i18n/cli/*.json) ----
+import { readdirSync } from "node:fs"
+const root = new URL("../../", import.meta.url)
+const read = rel => readFileSync(new URL(rel, root), "utf8")
+const keysOf = rel => Object.keys(JSON.parse(read(rel)))
+
+for (const dir of ["i18n/", "i18n/cli/"]) {
+  test(`${dir} catalogs all carry the same keys as en.json`, () => {
+    const en = keysOf(dir + "en.json").sort()
+    for (const f of readdirSync(new URL(dir, root)).filter(f => f.endsWith(".json"))) {
+      assert.deepEqual(keysOf(dir + f).sort(), en, dir + f)
+    }
+  })
+}
+
+test("every widget string the QML asks for exists in i18n/en.json", () => {
+  const en = new Set(keysOf("i18n/en.json"))
+  const src = ["Panel.qml", "DriveView.qml"].map(read).join("\n")
+  const used = [...src.matchAll(/\bt\("([^"]+)"\)/g)].map(m => m[1])
+  assert.ok(used.length > 20)
+  for (const k of used) assert.ok(en.has(k), k)
+  // stateText() builds "state.<x>" keys.
+  for (const s of ["mounted", "starting", "stopped", "error", "unconfigured", "unknown"]) assert.ok(en.has("state." + s), s)
+})
+
+test("every CLI message key the shell scripts use exists in i18n/cli/en.json", () => {
+  const en = new Set(keysOf("i18n/cli/en.json"))
+  const src = ["bin/omarchy-gdrive", "lib/common.sh", "lib/gdrive.sh"].map(read).join("\n")
+  const used = [...src.matchAll(/\$\(t "?([a-zA-Z]+\.[a-zA-Z.]+)"?[ )]/g)].map(m => m[1])
+  assert.ok(used.length > 50)
+  for (const k of used) assert.ok(en.has(k), k)
 })

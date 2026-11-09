@@ -13,33 +13,53 @@ is disruptive.
   or IPC calls (`omarchy-shell gusthx.gdrive ...`) to test a change.
 - **Do not** take screenshots of the user's desktop (`grim`) to check your work.
 
-## Test in isolation
+## Test and capture in isolation
 
-Run the plugin's QML in a **separate** Quickshell instance that never touches the running
-shell: make a throwaway config dir with symlinks to Omarchy's libraries and this repo, plus
-a small `shell.qml` that shows the component you are working on.
+`dev/run.sh` starts a **separate** Quickshell instance with Omarchy's `Commons`/`Ui`
+libraries and this repo. It never touches the running shell, never runs the CLI and never
+calls rclone: the popup (`DriveView.qml`) is fed by `dev/MockDrive.qml`. Captures render
+offscreen (Qt's offscreen platform) and save images straight to `docs/`.
 
 ```bash
-cfg="$XDG_RUNTIME_DIR/gusthx.gdrive-dev"; rm -rf "$cfg"; mkdir -p "$cfg"
-ln -s /usr/share/omarchy/shell/Commons "$cfg/Commons"
-ln -s /usr/share/omarchy/shell/Ui "$cfg/Ui"
-ln -s "$PWD" "$cfg/plugin"
-# write $cfg/shell.qml: ShellRoot { PanelWindow { ... import "plugin" as P ... } }
-quickshell -n -p "$cfg/shell.qml"
+dev/run.sh preview   # the popup in a window, mock data
+dev/run.sh docs      # docs/panel.png, panel-shared, panel-error, panel-setup, bar, panel-pt-BR
+dev/run.sh check     # compile every type, Panel.qml included (deploy runs this too)
+dev/run.sh test      # Model.js + i18n catalog tests, the client-secret writer test, bash -n
 ```
-
-For screenshots, draw on a background layer (`WlrLayershell.layer: WlrLayer.Background`,
-`keyboardFocus: None`) and save with `item.grabToImage(r => r.saveToFile(path))`, then
-`Qt.quit()`. A full working example is `dev/` in
-[omarchy-agents-pet](https://github.com/gusthanks/omarchy-agents-pet).
 
 Also run `omarchy plugin validate .`. What can't be rendered in isolation (live data in
 the real bar) is checked by the user after deploying, not by you on their live shell.
 
+**Never** run the CLI's `setup`, `status`, `quota`, `doctor` or any `rclone` command
+against the user's real remotes or `~/.config/rclone` to test a change. Tests that need a
+config use a throwaway `RCLONE_CONFIG` in a temp dir (see `dev/tests/secret.test.sh`).
+
 ## Deploy once, at the end, and restart the bar
 
-When ALL the requested work is finished, tested in isolation and committed, update the
-installed copy once and then run `omarchy restart shell` once. The shell's hot reload is
-not reliable for plugins (the old version can stay on screen), so do not tell the user
-something is done before the restart ran. Never deploy or restart in the middle of a task,
-and never use `omarchy refresh shell` (it resets the bar layout).
+When ALL the requested work is finished, tested in the harness and committed:
+
+```bash
+dev/deploy.sh   # validates, compiles, fast-forwards the live checkout to HEAD, restarts the shell once
+```
+
+The live plugin is a git checkout of this repo; deploy fast-forwards it (hand-copied edits
+there are dropped only when HEAD already has exactly those changes). The shell's hot
+reload is not reliable for plugins (the old version can stay on screen), so the deploy
+always ends with one `omarchy restart shell`. Do not tell the user something is done before
+this ran. Never use `omarchy refresh shell` (it resets the bar layout). Never deploy or
+restart in the middle of a task.
+
+## Other conventions
+
+- Repo root = plugin root (the layout `omarchy plugin add <url>` expects). Dev tooling
+  lives in `dev/`, screenshots in `docs/`.
+- Widget strings go through the plugin's own catalog in `i18n/` (`Commons.Translations`,
+  reached through `drive.t()`), never through `Commons.I18n` keys, which Omarchy may
+  rename. CLI strings live in `i18n/cli/`. Add every new key to every catalog (a test
+  checks this).
+- `DriveView.qml` reads everything from its `drive` object. A property or action added to
+  `Panel.qml` for the view must be added to `dev/MockDrive.qml` too.
+- Secrets (client secret, tokens) never go on a command line, into logs, into
+  `status --json` or into the UI.
+- Mock data only in the harness, tests and screenshots: never the user's email, Drive
+  contents, quota or config.
