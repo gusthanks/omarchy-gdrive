@@ -24,7 +24,8 @@ offscreen (Qt's offscreen platform) and save images straight to `docs/`.
 dev/run.sh preview   # the popup in a window, mock data
 dev/run.sh docs      # docs/panel.png, panel-shared, panel-error, panel-setup, bar, panel-pt-BR
 dev/run.sh check     # compile every type, Panel.qml included (deploy runs this too)
-dev/run.sh test      # Model.js + i18n catalog tests, the client-secret writer test, bash -n
+dev/run.sh test      # Model.js + i18n catalog tests, the client-secret writer test,
+                     # the ask-before-sudo test (stubbed sudo), bash -n
 ```
 
 Also run `omarchy plugin validate .`. What can't be rendered in isolation (live data in

@@ -13,8 +13,9 @@
 #   dev/run.sh docs         all of the captures above, plus panel in pt-BR
 #   dev/run.sh check        compile every plugin type, Panel.qml included
 #                           (declared, never instantiated); run before deploy
-#   dev/run.sh test         unit tests: Model.js, i18n catalogs, and the
-#                           client-secret writer on a throwaway rclone.conf
+#   dev/run.sh test         unit tests: Model.js, i18n catalogs, the
+#                           client-secret writer on a throwaway rclone.conf,
+#                           and the ask-before-sudo-pacman check (stubbed sudo)
 #
 # LANGUAGE picks the shell language for the run (default en), e.g.
 # LANGUAGE=pt-BR dev/run.sh panel. Captures render offscreen (HEADLESS=1, the
@@ -68,8 +69,8 @@ case "${1:-preview}" in
   docs)    for m in panel shared error setup bar; do "$0" "$m"; done
            LANGUAGE=pt-BR "$0" panel ;;
   test)    node --test "$repo/dev/tests/"
-           "$repo/dev/tests/secret.test.sh"
-           bash -n "$repo/bin/omarchy-gdrive" "$repo"/lib/*.sh "$repo"/dev/*.sh ;;
+           for t in "$repo"/dev/tests/*.test.sh; do "$t"; done
+           bash -n "$repo/bin/omarchy-gdrive" "$repo"/lib/*.sh "$repo"/dev/*.sh "$repo"/dev/tests/*.sh ;;
   check)
     # Compile-only: types are declared inside Components that never get created,
     # so no window opens. Needs the Wayland backend (Panel uses PanelWindow).

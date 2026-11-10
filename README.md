@@ -48,7 +48,7 @@ Don't want the widget? Clone the repo anywhere and run `bin/omarchy-gdrive setup
 
 ### What `setup` does, step by step
 
-1. `pacman -S rclone fuse3` if they are missing (asks first).
+1. If `rclone`, `fuse3` or `jq` are missing, shows the exact command (`sudo pacman -S --needed --noconfirm …`) and asks before running it. `--yes` answers for you; without a terminal and without `--yes`, nothing is installed.
 2. Looks for an existing `~/.config/systemd/user/rclone-gdrive.service`. If you wrote one, it offers **Adopt** (nothing changes, nothing restarts) or **Replace**.
 3. Creates (or reuses) the rclone remote `gdrive`. If you downloaded a `client_secret_*.json` from Google it finds it in `~/Downloads` and asks to use it. Otherwise it explains [why you want your own client](docs/own-client-id.md) and lets you paste the id and secret, or continue with rclone's shared client for now.
 4. Opens the browser once for Google's consent screen (`rclone config reconnect`).

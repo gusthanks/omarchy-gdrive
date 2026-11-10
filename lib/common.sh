@@ -420,9 +420,17 @@ ensure_deps() {
   have jq || missing+=(jq)
   (( ${#missing[@]} == 0 )) && return 0
   have pacman || die "$(t deps.missingNoPacman "${missing[*]}")"
+  # Show the exact root command and ask before running it. --yes skips the
+  # question; without --yes and without a terminal to ask in, nothing is
+  # installed (confirm() would otherwise take its default answer).
+  local cmd=(sudo pacman -S --needed --noconfirm "${missing[@]}")
   info "$(t deps.installing "${missing[*]}")"
-  confirm "$(t deps.confirm "${missing[*]}")" || die "$(t common.aborted)"
-  sudo pacman -S --needed --noconfirm "${missing[@]}" || die "$(t deps.failed)"
+  say "  ${cmd[*]}"
+  if ! (( ASSUME_YES )); then
+    interactive || die "$(t deps.needTerminal "$CLI_NAME")"
+    confirm "$(t deps.confirm "${missing[*]}")" || die "$(t common.aborted)"
+  fi
+  "${cmd[@]}" || die "$(t deps.failed)"
 }
 
 # ---------------------------------------------------------------------------
