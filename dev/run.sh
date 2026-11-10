@@ -10,6 +10,8 @@
 #   dev/run.sh error        docs/panel-error.png   (revoked token)
 #   dev/run.sh setup        docs/panel-setup.png   (before setup)
 #   dev/run.sh bar          docs/bar.png           (the pill)
+#   dev/run.sh gif          docs/demo.gif          (pill + popup: uploads finish,
+#                           pause, resume; needs ffmpeg)
 #   dev/run.sh docs         all of the captures above, plus panel in pt-BR
 #   dev/run.sh check        compile every plugin type, Panel.qml included
 #                           (declared, never instantiated); run before deploy
@@ -58,6 +60,24 @@ render() { # mode out
   [ -f "$2" ] && echo "${2#"$repo"/}" || { echo "no image written for $1 (log: $log)" >&2; return 1; }
 }
 
+gif() {
+  local frames="$cfg/frames"
+  rm -rf "$frames"; mkdir -p "$frames"
+  # One frame is written after the previous one is saved, however slow the
+  # machine is; the GIF plays them back at the rate the harness asks for.
+  MODE=gif OUT="$frames" timeout "${GIF_TIMEOUT:-1200}" env HEADLESS=1 QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR="${DEV_SCALE:-1.6}" \
+    quickshell -n -p "$cfg/shell.qml" >"$cfg/gif.log" 2>&1 || true
+  ls "$frames"/*.png >/dev/null 2>&1 || { echo "no frames written (log: $cfg/gif.log)" >&2; return 1; }
+  # The harness writes $frames/fps after the last frame; without it the run
+  # was cut short (GIF_TIMEOUT, default 1200 s) and the last png may be partial.
+  [ -f "$frames/fps" ] || { echo "the harness did not finish: $(ls "$frames"/*.png | wc -l) frames (log: $cfg/gif.log; raise GIF_TIMEOUT)" >&2; return 1; }
+  local fps; fps=$(cat "$frames/fps")
+  ffmpeg -loglevel error -y -framerate "$fps" -i "$frames/%04d.png" \
+    -vf "scale=480:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
+    "$repo/docs/demo$suffix.gif"
+  echo "docs/demo$suffix.gif ($(ls "$frames"/*.png | wc -l) frames at $fps fps, $(du -h "$repo/docs/demo$suffix.gif" | cut -f1))"
+}
+
 mkdir -p "$repo/docs"
 case "${1:-preview}" in
   preview) MODE=preview quickshell -n -p "$cfg/shell.qml" ;;
@@ -66,6 +86,7 @@ case "${1:-preview}" in
   error)   render error  "$repo/docs/panel-error$suffix.png" ;;
   setup)   render setup  "$repo/docs/panel-setup$suffix.png" ;;
   bar)     render bar    "$repo/docs/bar$suffix.png" ;;
+  gif)     gif ;;
   docs)    for m in panel shared error setup bar; do "$0" "$m"; done
            LANGUAGE=pt-BR "$0" panel ;;
   test)    node --test "$repo/dev/tests/"
@@ -85,5 +106,5 @@ case "${1:-preview}" in
     grep -a 'CHECK ' "$cfg/check.log" | sed 's/^.*CHECK /CHECK /'
     grep -a 'CHECK ' "$cfg/check.log" | grep -q . || { echo "check produced no output (log: $cfg/check.log)" >&2; exit 1; }
     ! grep -a 'CHECK ' "$cfg/check.log" | grep -vq ' OK$' ;;
-  *) sed -n '2,27p' "$0"; exit 1 ;;
+  *) sed -n '2,25p' "$0"; exit 1 ;;
 esac
