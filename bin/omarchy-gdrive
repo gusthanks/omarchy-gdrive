@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# omarchy-gdrive — mount Google Drive on Omarchy with rclone, the reproducible way.
+# omarchy-gdrive — Drive for Google: mount your Google Drive on Omarchy with rclone,
+# the reproducible way. Not affiliated with Google.
 #
 #   omarchy-gdrive setup     guided, idempotent install (own OAuth client, systemd user unit, bookmark)
 #   omarchy-gdrive status    one screen (or --json for the bar widget)

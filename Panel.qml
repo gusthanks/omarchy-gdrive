@@ -6,7 +6,7 @@ import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Google Drive bar widget for Omarchy. All state comes from the bundled CLI
+// Drive for Google: the bar widget (not affiliated with Google). All state comes from the bundled CLI
 // (`bin/omarchy-gdrive status --json`); this file only draws it and forwards
 // actions; the popup content is DriveView.qml. Secrets never pass through
 // here: the CLI reads rclone's config itself and the JSON it prints carries

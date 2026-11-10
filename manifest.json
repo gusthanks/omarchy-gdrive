@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "gusthx.gdrive",
-  "name": "Google Drive",
+  "name": "Drive for Google",
   "version": "0.1.0",
-  "author": "Gustavo Costa",
-  "description": "Google Drive mounted with rclone: reproducible setup CLI (own OAuth client, systemd user unit, doctor) plus a bar widget with mount state, cache usage, pause/resume and logs",
+  "author": "Gustavo Costa (gusthx)",
+  "license": "MIT",
+  "description": "Your Google Drive mounted with rclone: a guided setup CLI (your own OAuth client, a systemd user unit, a doctor) and a bar widget with mount state, cache usage, Drive quota, pause/resume and logs. Not affiliated with Google.",
   "kinds": [
     "bar-widget"
   ],
@@ -12,8 +13,8 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "Google Drive",
-    "description": "Mount state icon; click opens the folder, right-click opens the menu",
+    "displayName": "Drive for Google",
+    "description": "Mount state of your Google Drive; click opens the folder, right-click opens the menu",
     "category": "System",
     "defaultSection": "right",
     "allowMultiple": false
