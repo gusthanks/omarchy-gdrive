@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "gusthx.gdrive",
   "name": "Drive for Google",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Gustavo Costa (gusthx)",
   "license": "MIT",
   "description": "Your Google Drive mounted with rclone: a guided setup CLI (your own OAuth client, a systemd user unit, a doctor) and a bar widget with mount state, cache usage, Drive quota, pause/resume and logs. Not affiliated with Google.",

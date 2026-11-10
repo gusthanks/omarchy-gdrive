@@ -23,9 +23,11 @@ offscreen (Qt's offscreen platform) and save images straight to `docs/`.
 ```bash
 dev/run.sh preview   # the popup in a window, mock data
 dev/run.sh docs      # docs/panel.png, panel-shared, panel-error, panel-setup, bar, panel-pt-BR
+dev/run.sh gif       # docs/demo.gif: scripted frames, then ffmpeg (slow: run it alone)
 dev/run.sh check     # compile every type, Panel.qml included (deploy runs this too)
 dev/run.sh test      # Model.js + i18n catalog tests, the client-secret writer test,
-                     # the ask-before-sudo test (stubbed sudo), bash -n
+                     # the ask-before-sudo test (stubbed sudo), the version check
+                     # (manifest.json = lib/common.sh = CHANGELOG.md), bash -n
 ```
 
 Also run `omarchy plugin validate .`. What can't be rendered in isolation (live data in
@@ -54,6 +56,8 @@ restart in the middle of a task.
 
 - Repo root = plugin root (the layout `omarchy plugin add <url>` expects). Dev tooling
   lives in `dev/`, screenshots in `docs/`.
+- A release bumps `version` in `manifest.json`, `CLI_VERSION` in `lib/common.sh` and adds
+  a `CHANGELOG.md` entry; `dev/run.sh test` fails if they disagree.
 - Widget strings go through the plugin's own catalog in `i18n/` (`Commons.Translations`,
   reached through `drive.t()`), never through `Commons.I18n` keys, which Omarchy may
   rename. CLI strings live in `i18n/cli/`. Add every new key to every catalog (a test

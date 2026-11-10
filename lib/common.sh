@@ -10,7 +10,7 @@
 # Identity and defaults (a provider module may override before sourcing this)
 # ---------------------------------------------------------------------------
 : "${CLI_NAME:=omarchy-gdrive}"
-: "${CLI_VERSION:=0.1.0}"
+: "${CLI_VERSION:=0.2.0}"
 : "${PROVIDER_ID:=gdrive}"
 : "${DISPLAY_NAME:=Google Drive}"
 : "${BACKEND_TYPE:=drive}"

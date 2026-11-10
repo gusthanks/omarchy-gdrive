@@ -17,7 +17,8 @@
 #                           (declared, never instantiated); run before deploy
 #   dev/run.sh test         unit tests: Model.js, i18n catalogs, the
 #                           client-secret writer on a throwaway rclone.conf,
-#                           and the ask-before-sudo-pacman check (stubbed sudo)
+#                           the ask-before-sudo-pacman check (stubbed sudo) and
+#                           the version check (manifest, CLI, CHANGELOG)
 #
 # LANGUAGE picks the shell language for the run (default en), e.g.
 # LANGUAGE=pt-BR dev/run.sh panel. Captures render offscreen (HEADLESS=1, the
@@ -106,5 +107,5 @@ case "${1:-preview}" in
     grep -a 'CHECK ' "$cfg/check.log" | sed 's/^.*CHECK /CHECK /'
     grep -a 'CHECK ' "$cfg/check.log" | grep -q . || { echo "check produced no output (log: $cfg/check.log)" >&2; exit 1; }
     ! grep -a 'CHECK ' "$cfg/check.log" | grep -vq ' OK$' ;;
-  *) sed -n '2,25p' "$0"; exit 1 ;;
+  *) sed -n '2,26p' "$0"; exit 1 ;;
 esac
