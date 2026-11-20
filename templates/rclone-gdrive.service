@@ -22,7 +22,11 @@ ExecStart=/usr/bin/rclone mount @@REMOTE@@: @@MOUNTPOINT@@ \
     --log-level NOTICE
 ExecStop=/usr/bin/fusermount3 -uz @@MOUNTPOINT@@
 Restart=on-failure
+# The wait between failed starts grows from 10 s to 1 h instead of hammering
+# Google (and the CPU) every 10 s when the login was refused or the network is down.
 RestartSec=10
+RestartSteps=8
+RestartMaxDelaySec=1h
 
 [Install]
 WantedBy=default.target

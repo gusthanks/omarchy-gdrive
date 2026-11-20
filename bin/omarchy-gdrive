@@ -170,6 +170,7 @@ main() {
     start|mount)    cmd_start ;;
     stop|unmount|umount)  cmd_stop ;;
     restart)  cmd_restart ;;
+    reconnect|login) cmd_reconnect ;;
     logs|log) cmd_logs "${args[@]}" ;;
     doctor)   cmd_doctor "${args[@]}" ;;
     open)     cmd_open ;;

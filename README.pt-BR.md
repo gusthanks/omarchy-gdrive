@@ -16,7 +16,7 @@ Sem vínculo com o Google. Google Drive é uma marca registrada da Google LLC.
 - **`omarchy-gdrive setup`**: um comando guiado e idempotente. Instala o `rclone` se faltar (a única coisa que roda como root, e só depois que você disser sim), te guia para criar **o seu próprio cliente OAuth do Google**, faz o login, escreve uma unit de *usuário* do systemd com cache VFS bem configurado, monta `~/GoogleDrive` e adiciona a pasta na barra lateral do gerenciador de arquivos. Rode de novo quando quiser: ele só muda o que estiver diferente.
 - **Adota o que você já tem.** Já montou o Drive à mão com a sua própria `rclone-gdrive.service`? O `setup` detecta e oferece *adotar* sem mexer em nada (padrão) ou substituir pelo template.
 - **`omarchy-gdrive doctor`**: ferramentas, permissões da config, remote, `client_id` próprio ou compartilhado, rede, token, unit, mount, cache, uploads pendentes, favorito. Diz o que rodar para corrigir cada item. `--fix` aplica as correções seguras.
-- **`status`, `start`, `stop`, `restart`, `logs`, `quota`, `open`, `remove`**, e `status --json` para scripts.
+- **`status`, `start`, `stop`, `restart`, `reconnect`, `logs`, `quota`, `open`, `remove`**, e `status --json` para scripts.
 - **Widget de barra**: ícone de estado (montado / pausado / problema), contador de uploads pendentes, popup com uso do cache, cota do Drive, chave de pausar/retomar e botões de logs e doctor. Segue o tema do Omarchy ao vivo. O clique abre `~/GoogleDrive`.
 - **Nenhum segredo no lugar errado.** O `client_secret` vai direto para `~/.config/rclone/rclone.conf` (modo 600). Nunca passa pela linha de comando, nunca vai para o log e nunca aparece no widget. Veja [Privacidade e segurança](#privacidade-e-segurança).
 - **Inglês e português**, seguindo o idioma do Omarchy (com fallback para `$LANG`).
@@ -51,7 +51,7 @@ Não quer o widget? Clone o repositório em qualquer lugar e rode `bin/omarchy-g
 3. Cria (ou reaproveita) o remote `gdrive` do rclone. Se você baixou um `client_secret_*.json` do Google, ele encontra o arquivo em `~/Downloads` e pergunta se pode usar. Se não, explica [por que você quer o seu próprio cliente](docs/own-client-id.pt-BR.md) e deixa você colar o id e o secret, ou seguir por enquanto com o cliente compartilhado do rclone.
 4. Abre o navegador uma vez para a tela de consentimento do Google (`rclone config reconnect`).
 5. Escreve a unit a partir de [`templates/rclone-gdrive.service`](templates/rclone-gdrive.service):
-   `--vfs-cache-mode full`, cache limitado a 10 % do espaço livre no disco do cache (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, reinício automático.
+   `--vfs-cache-mode full`, cache limitado a 10 % do espaço livre no disco do cache (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, reinício automático com espera crescente (de 10 s até 1 h), para um mount com falha não tentar de novo a cada poucos segundos sem fim.
 6. `systemctl --user enable --now`, espera o mount, adiciona o favorito do GTK, `chmod 600 rclone.conf`.
 
 Tudo fica registrado em `~/.config/omarchy-gdrive/config` (remote, ponto de montagem, nome da unit, adotada ou gerenciada).
@@ -64,6 +64,8 @@ O rclone vem com um único `client_id` do Google, compartilhado por todos os usu
 
 Já tem o mount com o cliente compartilhado? `omarchy-gdrive setup --client` troca o cliente no remote existente, sem refazer nada.
 
+**Publique o app** (passo 4 do guia). Um app deixado no modo *Teste* do Google é desconectado a cada 7 dias e o mount para com `invalid_grant`. Se isso já aconteceu: publique o app e rode `omarchy-gdrive reconnect`.
+
 ## Uso
 
 ### Comandos
@@ -74,6 +76,7 @@ Já tem o mount com o cliente compartilhado? `omarchy-gdrive setup --client` tro
 | `status [--json]` | Uma tela: estado, serviço, remote, cache, uploads pendentes |
 | `doctor [--fix]` | Verificação completa, com o que rodar para corrigir; sai com código 1 só em falhas reais |
 | `start` / `stop` / `restart` | Monta, desmonta (avisa sobre uploads pendentes), remonta |
+| `reconnect` | Entra de novo no Google (o navegador abre uma vez) e remonta. É o conserto quando o log diz `invalid_grant`; o popup tem um botão **Reconectar** para isso |
 | `logs [-n N] [--no-follow]` | `journalctl --user -u rclone-gdrive -f` |
 | `quota [--json]` | Uso do Drive (`rclone about`) |
 | `open` | Abre o mount no gerenciador de arquivos |

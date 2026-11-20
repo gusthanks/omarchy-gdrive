@@ -52,6 +52,21 @@ provider_doctor_extra() {
   fi
 }
 
+# doctor, after "Google refused the login": why, and how to stop it recurring.
+provider_token_hint() {
+  if provider_own_credentials; then
+    say "    $(t gdrive.doctor.testingHint)"
+    say "    $(t gdrive.doctor.testingDocs "$GDRIVE_DOCS_URL#if-google-signs-you-out-every-7-days")"
+  fi
+}
+
+# reconnect: what is about to happen.
+provider_reconnect_intro() {
+  say "$(t gdrive.auth.2)"
+  if provider_own_credentials; then say "$(t gdrive.reconnect.testingNote)"; fi
+  say ""
+}
+
 provider_quota_json() {
   # `rclone about` is slow on Drive (often 10–20 s); callers cache the result.
   timeout 45 rclone about "$REMOTE:" --json 2>/dev/null || printf '{}'

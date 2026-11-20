@@ -67,19 +67,28 @@ same screens exist in every language.
 
 <!-- screenshot: img/03-consent-screen.png — Consent screen -->
 
-### 4. Add yourself as a test user
+### 4. Publish the app
 
-The app stays in *Testing* mode, which is exactly what you want: nobody but
-the accounts you list here can use it, and Google asks for no verification.
+A new app starts in *Testing* mode. **Do not leave it there:** Google ends
+every login of a Testing app after **7 days**, whatever the client type, and
+the mount then stops with `invalid_grant`. Publishing removes that limit.
 
 1. In the left menu open **Audience**.
-2. Under **Test users** click **+ Add users**, type your Google e-mail, **Save**.
+2. Under **Publishing status: Testing** click **Publish app**, then **Confirm**.
 
-<!-- screenshot: img/04-test-users.png — Test users -->
+<!-- screenshot: img/04-publish-app.png — Publish app -->
 
-> Tokens of apps in Testing mode used to expire after 7 days. That limit no
-> longer applies to the *Desktop app* client type used below, and rclone
-> refreshes the token automatically in the background.
+Publishing does not list your app anywhere or open it to strangers. Nobody
+can use it without your `client_secret`, and Google does not review it: an
+unverified app only shows a warning on the consent screen (step 6) and is
+capped at 100 users, far more than one person needs.
+
+> **Starting from scratch?** Google also offers a *Personal* audience
+> (<https://console.cloud.google.com/auth/overview/personal>): only the account
+> that created it can sign in, logins do not expire after 7 days and there is
+> no warning screen. It has to be chosen when the project is created and
+> cannot be changed later, so the steps here use *External* + **Publish app**,
+> which works for an app you already have.
 
 ### 5. Create the OAuth client
 
@@ -138,6 +147,19 @@ and gets its own token.
 **I lost the JSON.** In the console open **Clients**, click your client, and
 use **Download JSON** again, or copy the id and secret from that page and pick
 *Paste client_id and client_secret by hand* in `omarchy-gdrive setup --client`.
+
+### If Google signs you out every 7 days
+
+The mount stops, the bar shows a problem and the log says `invalid_grant:
+maybe token expired?`. Your app is still in *Testing* mode (step 4). Fix it
+once:
+
+1. <https://console.cloud.google.com/auth/audience> → **Publish app** → **Confirm**.
+2. `omarchy-gdrive reconnect` (or **Reconnect** in the bar popup): the browser
+   opens once, you sign in, and the mount comes back.
+
+Your files are not affected: they stay on Google Drive, and uploads still
+waiting in the local cache go up after the reconnect.
 
 **I want to revoke everything.** <https://myaccount.google.com/permissions>
 lists the app; removing it invalidates every token. Deleting the project in

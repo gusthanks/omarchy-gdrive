@@ -21,7 +21,8 @@ function emptyStatus() {
     cacheMax: "",
     cacheMaxBytes: 0,
     pendingUploads: 0,
-    lastError: ""
+    lastError: "",
+    authExpired: false
   }
 }
 

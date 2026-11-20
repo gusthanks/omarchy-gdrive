@@ -1,5 +1,5 @@
 {
-  "help.usage": "%1 %2 — Drive for Google: your Google Drive on Omarchy, mounted by rclone + systemd.\nNot affiliated with Google.\n\nUsage: %1 <command> [options]\n\nCommands:\n  setup      Guided, idempotent install. Adopts a mount you made by hand.\n             --client            only add/replace your own OAuth client\n             --credentials FILE  use this client_secret_*.json\n             --shared-client     keep rclone's shared client (not recommended)\n             --adopt | --replace what to do with an existing unit\n             --remote NAME       rclone remote name (default: gdrive)\n             --mountpoint DIR    where to mount (default: ~/GoogleDrive)\n             --service NAME      systemd user unit name (default: rclone-gdrive)\n  status     Current state (add --json for machines)\n  start | stop | restart\n  logs       Follow the service log (-n N, --no-follow)\n  doctor     Check tools, credentials, network, service, mount and cache (--fix)\n  quota      Drive usage (--json)\n  open       Open the mount in your file manager\n  remove     Undo everything on this machine (--keep-remote, --purge-cache)\n\nGlobal: --yes  --json  --quiet  --version  --help",
+  "help.usage": "%1 %2 — Drive for Google: your Google Drive on Omarchy, mounted by rclone + systemd.\nNot affiliated with Google.\n\nUsage: %1 <command> [options]\n\nCommands:\n  setup      Guided, idempotent install. Adopts a mount you made by hand.\n             --client            only add/replace your own OAuth client\n             --credentials FILE  use this client_secret_*.json\n             --shared-client     keep rclone's shared client (not recommended)\n             --adopt | --replace what to do with an existing unit\n             --remote NAME       rclone remote name (default: gdrive)\n             --mountpoint DIR    where to mount (default: ~/GoogleDrive)\n             --service NAME      systemd user unit name (default: rclone-gdrive)\n  status     Current state (add --json for machines)\n  start | stop | restart\n  reconnect  Sign in to Google again and remount (when the login expired)\n  logs       Follow the service log (-n N, --no-follow)\n  doctor     Check tools, credentials, network, service, mount and cache (--fix)\n  quota      Drive usage (--json)\n  open       Open the mount in your file manager\n  remove     Undo everything on this machine (--keep-remote, --purge-cache)\n\nGlobal: --yes  --json  --quiet  --version  --help",
   "common.yes": "Yes",
   "common.no": "No",
   "common.aborted": "Aborted.",
@@ -50,7 +50,7 @@
   "doctor.network": "Google APIs reachable",
   "doctor.noNetwork": "Cannot reach googleapis.com (offline?)",
   "doctor.token": "Token valid — Drive answered a listing",
-  "doctor.tokenBad": "Drive did not answer. Token expired or revoked? Try: rclone config reconnect %1:",
+  "doctor.tokenBad": "Google refused the login (the token expired or was revoked). Fix it with: %1 reconnect",
   "doctor.unit": "Service unit %1 (%2)",
   "doctor.vfsFull": "--vfs-cache-mode full (safe for editing files in place)",
   "doctor.vfsNotFull": "Unit does not use --vfs-cache-mode full; many apps misbehave without it",
@@ -154,5 +154,17 @@
   "setup.doctorHint": "Check it any time with: %1 doctor",
   "doctor.tokenViaMount": "Token valid — the mount is serving files",
   "doctor.tokenThrottled": "Google is throttling the shared client_id (rateLimitExceeded). The token is fine; this is exactly why you want your own: %1 setup --client",
-  "doctor.tokenUnreachable": "Could not reach Drive to verify the token (offline or slow network); try again later"
+  "doctor.tokenUnreachable": "Could not reach Drive to verify the token (offline or slow network); try again later",
+  "status.authExpired": "Google signed you out. Sign in again with: %1 reconnect",
+  "reconnect.title": "Sign in to %1 again",
+  "reconnect.nonInteractive": "reconnect needs a terminal (the browser opens for Google's consent). Run %1 reconnect in a terminal.",
+  "reconnect.failed": "The Google sign-in did not finish. Run %1 reconnect again.",
+  "reconnect.ok": "Signed in: Drive answers again on remote '%1'",
+  "reconnect.verifyFailed": "Signed in, but Drive still does not answer:",
+  "doctor.backoff": "Failed starts are retried with a growing wait (up to 1 h)",
+  "doctor.backoffFixed": "Added a growing wait between failed starts: %1",
+  "doctor.noBackoff": "A failing mount is retried every few seconds forever. Fix with: %1 doctor --fix",
+  "gdrive.doctor.testingHint": "If this happens every 7 days, your Google app is in Testing mode: publish it (Google Auth Platform → Audience → Publish app).",
+  "gdrive.doctor.testingDocs": "Details: %1",
+  "gdrive.reconnect.testingNote": "Signed out again after a week? Your Google app is in Testing mode, which ends every login after 7 days. Publish it once (Google Auth Platform → Audience → Publish app) and this stops."
 }

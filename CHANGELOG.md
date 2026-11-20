@@ -3,6 +3,32 @@
 All notable changes to this plugin. Versions follow the `version` field in
 `manifest.json` (the CLI's `--version` reports the same number).
 
+## 0.3.0 (2026-11-20)
+
+### Fixed
+- The guide said Google's 7-day login limit for apps in *Testing* mode no longer
+  applied to Desktop clients. It does: every Testing app with the Drive scope is
+  signed out after 7 days and the mount stops with `invalid_grant`. Step 4 of
+  [docs/own-client-id.md](docs/own-client-id.md) now says to **Publish app**, and
+  a new FAQ entry explains what to do when it already happened.
+- A mount that kept failing was shown as "Starting…" forever. Waiting between two
+  failed starts (`auto-restart`) is now reported as a problem.
+
+### Added
+- `omarchy-gdrive reconnect`: sign in to Google again (the browser opens once),
+  verify the token, clear the failure and remount.
+- When Google refused the login, `status --json` carries `authExpired: true` and
+  the popup says so in plain words, with a **Reconnect** button.
+- `doctor` explains a refused login (and the 7-day Testing cause, for your own
+  client) and points to `reconnect`.
+
+### Changed
+- Restart backoff: failed starts are retried with a wait that grows from 10 s to
+  1 h (`RestartSteps=8`, `RestartMaxDelaySec=1h`) instead of every 10 s forever.
+  New units from the template carry it; for an adopted unit `doctor --fix` adds it
+  as a drop-in (`rclone-gdrive.service.d/50-omarchy-backoff.conf`) and leaves your
+  own file untouched.
+
 ## 0.2.0 (2026-11-10)
 
 ### Changed

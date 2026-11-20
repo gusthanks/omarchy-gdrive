@@ -27,7 +27,7 @@ Item {
       quota: { used: 9.2 * 1073741824, total: 15 * 1073741824, free: 5.8 * 1073741824 }
     },
     error: {
-      status: { state: "error", mounted: false, ownClient: true, mountpoint: "/home/user/GoogleDrive",
+      status: { state: "error", mounted: false, ownClient: true, authExpired: true, mountpoint: "/home/user/GoogleDrive",
                 cacheBytes: 1.1 * 1073741824, cacheMax: "15G", cacheMaxBytes: 15 * 1073741824, pendingUploads: 0,
                 lastError: "Failed to create file system for \"gdrive:\": couldn't find root directory ID: oauth2: \"invalid_grant\" \"Token has been expired or revoked.\"" },
       quota: null
@@ -85,6 +85,7 @@ Item {
   function openLogs() { console.log("mock: openLogs") }
   function openDoctor() { console.log("mock: openDoctor") }
   function openSetup() { console.log("mock: openSetup") }
+  function openReconnect() { console.log("mock: openReconnect") }
   function refresh() { console.log("mock: refresh") }
   function refreshQuota(force) { console.log("mock: refreshQuota") }
 }

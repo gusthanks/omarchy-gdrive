@@ -100,3 +100,8 @@ test("every CLI message key the shell scripts use exists in i18n/cli/en.json", (
   assert.ok(used.length > 50)
   for (const k of used) assert.ok(en.has(k), k)
 })
+
+test("parseStatus keeps authExpired, false by default", () => {
+  assert.equal(M.parseStatus('{"state":"error","authExpired":true}').authExpired, true)
+  assert.equal(M.parseStatus('{"state":"mounted"}').authExpired, false)
+})

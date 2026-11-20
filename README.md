@@ -16,7 +16,7 @@ Not affiliated with Google. Google Drive is a trademark of Google LLC.
 - **`omarchy-gdrive setup`** — one guided, idempotent command. Installs `rclone` if missing (the only thing that ever runs as root, and only after you say yes), walks you through creating **your own Google OAuth client**, signs you in, writes a systemd *user* unit with sane VFS-cache defaults, mounts `~/GoogleDrive` and adds it to the file manager sidebar. Run it again any time; it only changes what differs.
 - **Adopts what you already have.** Mounted Drive by hand with your own `rclone-gdrive.service`? `setup` detects it and offers to *adopt* it untouched (default) or replace it with the template.
 - **`omarchy-gdrive doctor`** — tools, config permissions, remote, own vs. shared `client_id`, network, token, unit, mount, cache, pending uploads, bookmark. Says what to run to fix each thing. `--fix` applies the safe ones.
-- **`status`, `start`, `stop`, `restart`, `logs`, `quota`, `open`, `remove`** — and `status --json` for machines.
+- **`status`, `start`, `stop`, `restart`, `reconnect`, `logs`, `quota`, `open`, `remove`** — and `status --json` for machines.
 - **Bar widget** — state icon (mounted / paused / problem), pending-upload badge, popup with cache usage, Drive quota, pause/resume switch, logs and doctor buttons. Follows the Omarchy theme live. Click opens `~/GoogleDrive`.
 - **No secrets in the wrong place.** The `client_secret` is written straight into `~/.config/rclone/rclone.conf` (mode 600), never passed on a command line, never logged, never shown in the widget. See [Privacy and security](#privacy-and-security).
 - **English and Portuguese**, following the Omarchy language setting (falls back to `$LANG`).
@@ -51,7 +51,7 @@ Don't want the widget? Clone the repo anywhere and run `bin/omarchy-gdrive setup
 3. Creates (or reuses) the rclone remote `gdrive`. If you downloaded a `client_secret_*.json` from Google it finds it in `~/Downloads` and asks to use it. Otherwise it explains [why you want your own client](docs/own-client-id.md) and lets you paste the id and secret, or continue with rclone's shared client for now.
 4. Opens the browser once for Google's consent screen (`rclone config reconnect`).
 5. Writes the unit from [`templates/rclone-gdrive.service`](templates/rclone-gdrive.service):
-   `--vfs-cache-mode full`, cache capped at 10 % of the free space on the cache disk (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, auto-restart.
+   `--vfs-cache-mode full`, cache capped at 10 % of the free space on the cache disk (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, auto-restart with a growing wait (10 s up to 1 h) so a failing mount does not retry every few seconds forever.
 6. `systemctl --user enable --now`, waits for the mount, adds the GTK bookmark, `chmod 600 rclone.conf`.
 
 Everything is recorded in `~/.config/omarchy-gdrive/config` (remote, mount point, unit name, adopted or managed).
@@ -64,6 +64,8 @@ rclone ships with one shared Google `client_id` used by every rclone user on Ear
 
 Already mounted with the shared client? `omarchy-gdrive setup --client` upgrades the existing remote in place.
 
+**Publish the app** (step 4 of the guide). An app left in Google's *Testing* mode is signed out every 7 days and the mount stops with `invalid_grant`. If that already happened: publish it, then run `omarchy-gdrive reconnect`.
+
 ## Use
 
 ### Commands
@@ -74,6 +76,7 @@ Already mounted with the shared client? `omarchy-gdrive setup --client` upgrades
 | `status [--json]` | One screen: state, service, remote, cache, pending uploads |
 | `doctor [--fix]` | Full health check with fixes to run; exit 1 only on real failures |
 | `start` / `stop` / `restart` | Mount, unmount (warns about pending uploads), remount |
+| `reconnect` | Sign in to Google again (browser opens once) and remount. The fix when the log says `invalid_grant`; the popup has a **Reconnect** button for it |
 | `logs [-n N] [--no-follow]` | `journalctl --user -u rclone-gdrive -f` |
 | `quota [--json]` | Drive usage (`rclone about`) |
 | `open` | Open the mount in the file manager |

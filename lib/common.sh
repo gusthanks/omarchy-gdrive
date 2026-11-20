@@ -10,7 +10,7 @@
 # Identity and defaults (a provider module may override before sourcing this)
 # ---------------------------------------------------------------------------
 : "${CLI_NAME:=omarchy-gdrive}"
-: "${CLI_VERSION:=0.2.0}"
+: "${CLI_VERSION:=0.3.0}"
 : "${PROVIDER_ID:=gdrive}"
 : "${DISPLAY_NAME:=Google Drive}"
 : "${BACKEND_TYPE:=drive}"
@@ -228,6 +228,11 @@ status_remote_facts() {
   printf '%s' "$facts"
 }
 
+# Errors that mean "sign in again": the refresh token was refused, revoked or
+# the OAuth client is gone. Retrying never fixes these; only a reconnect does.
+AUTH_ERROR_RE='invalid_grant|expired or revoked|empty token|couldn.t fetch token|unauthorized_client|invalid_client|deleted_client'
+is_auth_error() { grep -qiE "$AUTH_ERROR_RE" <<<"${1:-}"; }
+
 # A real round trip with a short budget: proves the token (and the network) work.
 REMOTE_TOKEN_ERROR=""
 remote_token_ok() {
@@ -239,7 +244,7 @@ remote_token_ok() {
   REMOTE_TOKEN_KIND=ok
   if (( rc != 0 )); then
     if grep -qiE 'rateLimitExceeded|userRateLimitExceeded|quotaExceeded|429' <<<"$out"; then REMOTE_TOKEN_KIND=throttled
-    elif grep -qiE 'invalid_grant|expired or revoked|empty token|couldn.t fetch token|unauthorized_client|invalid_client|deleted_client' <<<"$out"; then REMOTE_TOKEN_KIND=invalid
+    elif is_auth_error "$out"; then REMOTE_TOKEN_KIND=invalid
     else REMOTE_TOKEN_KIND=unreachable; fi
   fi
   return $rc
@@ -294,6 +299,23 @@ service_result()       { systemctl_user show -p Result --value "$SERVICE.service
 # doctor's output, so scrub anything that looks like a credential first.
 service_last_error() {
   journalctl --user -u "$SERVICE.service" -p err -n 1 -o cat --no-pager 2>/dev/null | tail -n 1 | redact_secrets
+}
+
+# Restart backoff. A failing mount (no network, a refused login) used to be
+# retried every 10 s forever; now the wait doubles up to an hour. Units from the
+# template carry it; an adopted unit gets it from a drop-in (doctor --fix), so
+# the user's own file is never edited.
+service_has_backoff() {
+  local steps; steps=$(systemctl_user show -p RestartSteps --value "$SERVICE.service" 2>/dev/null)
+  [[ $steps =~ ^[0-9]+$ ]] && (( steps > 0 ))
+}
+backoff_dropin_path() { printf '%s/%s.service.d/50-omarchy-backoff.conf' "$SYSTEMD_USER_DIR" "$SERVICE"; }
+install_backoff_dropin() {
+  local path; path=$(backoff_dropin_path)
+  mkdir -p "$(dirname "$path")" || return 1
+  printf '%s\n' "# Written by $CLI_NAME doctor --fix: wait longer between failed starts." \
+    "[Service]" "RestartSteps=8" "RestartMaxDelaySec=1h" > "$path" || return 1
+  systemctl_user daemon-reload
 }
 
 # 10 % of the free space on the disk that holds the cache, clamped to 2–50 GiB.
@@ -442,6 +464,8 @@ declare -F provider_create_remote >/dev/null || provider_create_remote() { die "
 declare -F provider_own_credentials >/dev/null || provider_own_credentials() { return 0; }     # 0 = own API credentials, 1 = shared/none
 declare -F provider_offer_credentials >/dev/null || provider_offer_credentials() { :; }            # setup: existing remote without own creds
 declare -F provider_doctor_extra >/dev/null || provider_doctor_extra() { :; }            # extra doctor lines
+declare -F provider_token_hint >/dev/null || provider_token_hint() { :; }              # doctor: after a refused login
+declare -F provider_reconnect_intro >/dev/null || provider_reconnect_intro() { :; }    # reconnect: text before the browser opens
 declare -F provider_quota_json >/dev/null || provider_quota_json() { printf '{}'; }  # {"total":..,"used":..,"free":..}
 declare -F provider_network_ok >/dev/null || provider_network_ok() { curl -fsS -m 5 -o /dev/null https://example.com/ 2>/dev/null; }
 
@@ -450,8 +474,11 @@ declare -F provider_network_ok >/dev/null || provider_network_ok() { curl -fsS -
 # ---------------------------------------------------------------------------
 # unconfigured | stopped | starting | mounted | error
 summary_state() {
-  local active=$1 mounted=$2 remote_ok=$3 unit_ok=$4
+  local active=$1 mounted=$2 remote_ok=$3 unit_ok=$4 sub=${5:-}
   if [[ $remote_ok != true || $unit_ok != true ]]; then printf 'unconfigured'; return; fi
+  # Between two failed starts systemd waits in "auto-restart": that is a
+  # failure being retried, not a mount on its way up.
+  [[ $sub == auto-restart* && $mounted != true ]] && { printf 'error'; return; }
   case $active in
     active)       [[ $mounted == true ]] && printf 'mounted' || printf 'starting' ;;
     activating|reloading) printf 'starting' ;;
@@ -482,8 +509,11 @@ cmd_status() {
   last_err=$(service_last_error)
   managed=${MANAGED:-$(unit_is_managed && echo template || echo adopted)}
   [[ $unit_ok == true ]] || managed=""
-  state=$(summary_state "$active" "$mounted" "$remote_ok" "$unit_ok")
+  state=$(summary_state "$active" "$mounted" "$remote_ok" "$unit_ok" "$sub")
   [[ $state == mounted && $responsive != true ]] && state=error
+  # Google refused the login: say so, so the widget can offer a reconnect.
+  local auth_expired=false
+  [[ $state == error ]] && is_auth_error "$last_err" && auth_expired=true
 
   if (( JSON_OUTPUT )); then
     jq -n \
@@ -494,6 +524,7 @@ cmd_status() {
       --argjson mounted "$mounted" --argjson responsive "$responsive" \
       --argjson cacheBytes "${cache_b:-0}" --arg cacheMax "${cache_max:-off}" --argjson cacheMaxBytes "${cache_max_b:-0}" \
       --argjson pendingUploads "${pending:-0}" --arg lastError "$last_err" --arg state "$state" \
+      --argjson authExpired "$auth_expired" \
       --arg version "$CLI_VERSION" \
       '$ARGS.named'
     return 0
@@ -515,6 +546,7 @@ cmd_status() {
   fi
   say "  $(t status.cache "$(human_bytes "$cache_b")" "${cache_max:-∞}" "$pending")"
   [[ -n $last_err ]] && say "  $(t status.lastError "$last_err")"
+  [[ $auth_expired == true ]] && say "  $(t status.authExpired "$CLI_NAME")"
   [[ $state == mounted ]]
 }
 
@@ -540,6 +572,28 @@ cmd_stop() {
 }
 
 cmd_restart() { cmd_stop && cmd_start; }
+
+# Sign in to Google again (the browser opens once), then bring the mount back.
+# This is the whole fix when the token was refused (invalid_grant).
+cmd_reconnect() {
+  have rclone || die "$(t doctor.noRclone)"
+  remote_exists || die "$(t doctor.noRemote "$REMOTE" "$CLI_NAME")"
+  title "$(t reconnect.title "$DISPLAY_NAME")"
+  provider_reconnect_intro
+  interactive || die "$(t reconnect.nonInteractive "$CLI_NAME")"
+  rclone config reconnect "$REMOTE:" </dev/tty || die "$(t reconnect.failed "$CLI_NAME")"
+  secure_rclone_conf
+  if remote_token_ok; then ok "$(t reconnect.ok "$REMOTE")"; else
+    fail "$(t reconnect.verifyFailed)"
+    [[ -n $REMOTE_TOKEN_ERROR ]] && say "    ${C_DIM}${REMOTE_TOKEN_ERROR}${C_RESET}"
+    return 1
+  fi
+  unit_exists || return 0
+  # Clear the failure counter and any backoff, then start fresh.
+  systemctl_user reset-failed "$SERVICE.service" >/dev/null 2>&1 || true
+  systemctl_user stop "$SERVICE.service" >/dev/null 2>&1 || true
+  cmd_start
+}
 
 cmd_logs() {
   local follow=1 lines=100
@@ -623,7 +677,7 @@ cmd_doctor() {
     else
       case $REMOTE_TOKEN_KIND in
         throttled)   d_warn "$(t doctor.tokenThrottled "$CLI_NAME")" ;;
-        invalid)     d_fail "$(t doctor.tokenBad "$REMOTE")" ;;
+        invalid)     d_fail "$(t doctor.tokenBad "$CLI_NAME")"; provider_token_hint ;;
         *)           d_warn "$(t doctor.tokenUnreachable)" ;;
       esac
       [[ -n $REMOTE_TOKEN_ERROR ]] && say "    ${C_DIM}${REMOTE_TOKEN_ERROR}${C_RESET}"
@@ -638,7 +692,11 @@ cmd_doctor() {
     if service_enabled; then d_ok "$(t doctor.enabled "$SERVICE")"; else
       if (( DOCTOR_FIX )); then systemctl_user enable "$SERVICE.service" >/dev/null 2>&1 && d_ok "$(t doctor.enabledFixed "$SERVICE")"; else d_warn "$(t doctor.notEnabled "$SERVICE")"; fi
     fi
+    if service_has_backoff; then d_ok "$(t doctor.backoff)"; else
+      if (( DOCTOR_FIX )); then install_backoff_dropin && d_ok "$(t doctor.backoffFixed "$(backoff_dropin_path)")"; else d_warn "$(t doctor.noBackoff "$CLI_NAME")"; fi
+    fi
     local active; active=$(service_active_state)
+    [[ $(service_sub_state) == auto-restart* ]] && active=failed
     case $active in
       active) d_ok "$(t doctor.active "$SERVICE")" ;;
       failed) d_fail "$(t doctor.failed "$SERVICE" "$(service_last_error)" "$CLI_NAME")" ;;

@@ -40,5 +40,8 @@
   "action.tooltip.pause": "Stop the mount; cached uploads resume on next start (p)",
   "action.tooltip.resume": "Start the mount (p)",
   "hint.keys": "o open · p pause/resume · l logs · d doctor · r refresh · Esc close",
-  "sharedClient": "Using rclone's shared client_id (retired in 2026) — run omarchy-gdrive setup --client"
+  "sharedClient": "Using rclone's shared client_id (retired in 2026) — run omarchy-gdrive setup --client",
+  "error.authExpired": "Google signed you out, so the Drive is not mounted. Your files are safe. Click Reconnect to sign in again.",
+  "action.reconnect": "Reconnect",
+  "action.tooltip.reconnect": "Sign in to Google again in a terminal, then remount"
 }

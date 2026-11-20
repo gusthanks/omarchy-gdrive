@@ -171,10 +171,18 @@ Column {
       fontFamily: view.drive.fontFamily
       width: parent.width
     }
+    // A refused login gets plain words first; the raw rclone line stays below.
+    PlainText {
+      visible: view.drive.st.authExpired === true
+      width: parent.width
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
+      text: view.drive.t("error.authExpired")
+    }
     PlainText {
       width: parent.width
       wrapMode: Text.WrapAnywhere
-      maximumLineCount: 4
+      maximumLineCount: view.drive.st.authExpired === true ? 2 : 4
       elide: Text.ElideRight
       text: Model.neutralizeMarkup(view.drive.st.lastError, 320)
       color: view.drive.dimColor
@@ -189,6 +197,13 @@ Column {
     width: parent.width
     spacing: Style.space(6)
 
+    ActionBtn {
+      visible: view.drive.st.authExpired === true
+      iconText: "󰌆"   // md-key
+      text: view.drive.t("action.reconnect")
+      tooltipText: view.drive.t("action.tooltip.reconnect")
+      onClicked: view.drive.openReconnect()
+    }
     ActionBtn {
       visible: !view.drive.configured
       iconText: "󰒓"   // md-cog

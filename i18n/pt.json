@@ -40,5 +40,8 @@
   "action.tooltip.pause": "Parar o mount; uploads em cache continuam no próximo start (p)",
   "action.tooltip.resume": "Iniciar o mount (p)",
   "hint.keys": "o abrir · p pausar/retomar · l logs · d doctor · r atualizar · Esc fechar",
-  "sharedClient": "Usando o client_id compartilhado do rclone (aposentado em 2026) — rode omarchy-gdrive setup --client"
+  "sharedClient": "Usando o client_id compartilhado do rclone (aposentado em 2026) — rode omarchy-gdrive setup --client",
+  "error.authExpired": "O Google desconectou você, por isso o Drive não está montado. Seus arquivos estão seguros. Clique em Reconectar para entrar de novo.",
+  "action.reconnect": "Reconectar",
+  "action.tooltip.reconnect": "Entrar de novo no Google num terminal e remontar"
 }

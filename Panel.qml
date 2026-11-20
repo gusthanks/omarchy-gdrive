@@ -99,6 +99,11 @@ Panel {
     var cmd = "omarchy-launch-floating-terminal-with-presentation bash " + Model.shellQuote(root.cliPath) + " doctor"
     if (root.bar) root.bar.run(cmd); else Quickshell.execDetached(["bash", "-lc", cmd])
   }
+  function openReconnect() {
+    root.close()
+    var cmd = "omarchy-launch-floating-terminal-with-presentation bash " + Model.shellQuote(root.cliPath) + " reconnect"
+    if (root.bar) root.bar.run(cmd); else Quickshell.execDetached(["bash", "-lc", cmd])
+  }
   function openSetup() {
     root.close()
     var cmd = "omarchy-launch-floating-terminal-with-presentation bash " + Model.shellQuote(root.cliPath) + " setup"
