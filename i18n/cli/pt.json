@@ -166,5 +166,11 @@
   "doctor.noBackoff": "Um mount com falha é repetido a cada poucos segundos, sem fim. Conserte com: %1 doctor --fix",
   "gdrive.doctor.testingHint": "Se isso acontece a cada 7 dias, o seu app do Google está em modo Teste: publique o app (Google Auth Platform → Público-alvo → Publicar app).",
   "gdrive.doctor.testingDocs": "Detalhes: %1",
-  "gdrive.reconnect.testingNote": "Desconectou de novo depois de uma semana? O seu app do Google está em modo Teste, que encerra todo login depois de 7 dias. Publique o app uma vez (Google Auth Platform → Público-alvo → Publicar app) e isso para."
+  "gdrive.reconnect.testingNote": "Desconectou de novo depois de uma semana? O seu app do Google está em modo Teste, que encerra todo login depois de 7 dias. Publique o app uma vez (Google Auth Platform → Público-alvo → Publicar app) e isso para.",
+  "err.loginRefused": "O Google recusou o login, então a montagem fica desligada (sem novas tentativas, sem gastar CPU). Entre de novo com: %1 reconnect",
+  "guard.stopping": "O Google recusou o login: %1 fica desligado até você rodar %2 reconnect (sem ficar tentando).",
+  "doctor.guard": "Login recusado desliga a montagem em vez de ficar tentando",
+  "doctor.guardFixed": "Proteção de login adicionada (login recusado desliga a montagem): %1",
+  "doctor.noGuard": "Login recusado continua sendo tentado de novo. Corrija com: %1 doctor --fix",
+  "doctor.loginRefused": "O Google recusou o login; a montagem fica desligada até: %1 reconnect"
 }

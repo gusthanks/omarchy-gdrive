@@ -51,7 +51,7 @@ Don't want the widget? Clone the repo anywhere and run `bin/omarchy-gdrive setup
 3. Creates (or reuses) the rclone remote `gdrive`. If you downloaded a `client_secret_*.json` from Google it finds it in `~/Downloads` and asks to use it. Otherwise it explains [why you want your own client](docs/own-client-id.md) and lets you paste the id and secret, or continue with rclone's shared client for now.
 4. Opens the browser once for Google's consent screen (`rclone config reconnect`).
 5. Writes the unit from [`templates/rclone-gdrive.service`](templates/rclone-gdrive.service):
-   `--vfs-cache-mode full`, cache capped at 10 % of the free space on the cache disk (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, auto-restart with a growing wait (10 s up to 1 h) so a failing mount does not retry every few seconds forever.
+   `--vfs-cache-mode full`, cache capped at 10 % of the free space on the cache disk (2–50 GiB), `--vfs-cache-max-age 72h`, `--dir-cache-time 72h`, `--poll-interval 1m`, `--umask 022`, `After=network-online.target`, auto-restart with a growing wait (10 s up to 1 h) so a failing mount does not retry every few seconds forever. When Google refuses the login (a retry can never fix that), the mount turns itself off and stays off, reboots included, until `omarchy-gdrive reconnect`.
 6. `systemctl --user enable --now`, waits for the mount, adds the GTK bookmark, `chmod 600 rclone.conf`.
 
 Everything is recorded in `~/.config/omarchy-gdrive/config` (remote, mount point, unit name, adopted or managed).

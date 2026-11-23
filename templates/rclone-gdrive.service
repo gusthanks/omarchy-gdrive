@@ -27,6 +27,7 @@ Restart=on-failure
 RestartSec=10
 RestartSteps=8
 RestartMaxDelaySec=1h
+@@LOGIN_GUARD@@
 
 [Install]
 WantedBy=default.target

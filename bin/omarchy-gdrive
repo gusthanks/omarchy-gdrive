@@ -171,6 +171,7 @@ main() {
     stop|unmount|umount)  cmd_stop ;;
     restart)  cmd_restart ;;
     reconnect|login) cmd_reconnect ;;
+    auth-guard) cmd_auth_guard "${args[@]}" ;;   # systemd ExecStopPost only
     logs|log) cmd_logs "${args[@]}" ;;
     doctor)   cmd_doctor "${args[@]}" ;;
     open)     cmd_open ;;

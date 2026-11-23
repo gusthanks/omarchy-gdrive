@@ -3,6 +3,30 @@
 All notable changes to this plugin. Versions follow the `version` field in
 `manifest.json` (the CLI's `--version` reports the same number).
 
+## 0.4.0 (2026-11-23)
+
+### Added
+- **Login guard.** When Google refuses the login, the mount turns itself off
+  instead of retrying: retrying can never fix a refused login, it only costs CPU
+  and battery (on a 2-core laptop the old loop restarted rclone every 10 s). The
+  unit gets three lines: `ExecStopPost` runs the new internal `auth-guard`
+  command, which recognises the refusal in that run's log, writes
+  `~/.config/omarchy-gdrive/<service>.login-refused` and stops the unit;
+  `ExecCondition` skips every start (boot included) while that file exists;
+  `ExecStartPost` deletes it once a mount comes up. `reconnect` deletes it too, and
+  a newer `rclone.conf` (a `rclone config reconnect` made by hand) lifts it. Any
+  other failure, like no network, keeps the normal restart with backoff.
+- The popup shows the refused login with its **Reconnect** button while the mount
+  is off; `start` explains why it will not start; `doctor` checks the guard and
+  `doctor --fix` adds it to an adopted unit as a drop-in
+  (`rclone-gdrive.service.d/60-omarchy-login-guard.conf`). `remove` deletes both
+  drop-ins.
+
+### Fixed
+- The last error (in `status` and the popup) was systemd's own "Failed to start …"
+  line instead of rclone's message, so a refused login was never recognised as one.
+  It now reads only rclone's lines.
+
 ## 0.3.0 (2026-11-20)
 
 ### Fixed

@@ -166,5 +166,11 @@
   "doctor.noBackoff": "A failing mount is retried every few seconds forever. Fix with: %1 doctor --fix",
   "gdrive.doctor.testingHint": "If this happens every 7 days, your Google app is in Testing mode: publish it (Google Auth Platform → Audience → Publish app).",
   "gdrive.doctor.testingDocs": "Details: %1",
-  "gdrive.reconnect.testingNote": "Signed out again after a week? Your Google app is in Testing mode, which ends every login after 7 days. Publish it once (Google Auth Platform → Audience → Publish app) and this stops."
+  "gdrive.reconnect.testingNote": "Signed out again after a week? Your Google app is in Testing mode, which ends every login after 7 days. Publish it once (Google Auth Platform → Audience → Publish app) and this stops.",
+  "err.loginRefused": "Google refused the login, so the mount stays off (no retries, no CPU). Sign in again with: %1 reconnect",
+  "guard.stopping": "Google refused the login: %1 stays off until you run %2 reconnect (no retry loop).",
+  "doctor.guard": "A refused login turns the mount off instead of retrying",
+  "doctor.guardFixed": "Added the login guard (a refused login turns the mount off): %1",
+  "doctor.noGuard": "A refused login keeps being retried. Fix with: %1 doctor --fix",
+  "doctor.loginRefused": "Google refused the login; the mount is off until: %1 reconnect"
 }

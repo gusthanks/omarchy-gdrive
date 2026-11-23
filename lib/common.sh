@@ -10,7 +10,7 @@
 # Identity and defaults (a provider module may override before sourcing this)
 # ---------------------------------------------------------------------------
 : "${CLI_NAME:=omarchy-gdrive}"
-: "${CLI_VERSION:=0.3.0}"
+: "${CLI_VERSION:=0.4.0}"
 : "${PROVIDER_ID:=gdrive}"
 : "${DISPLAY_NAME:=Google Drive}"
 : "${BACKEND_TYPE:=drive}"
@@ -27,6 +27,9 @@ SYSTEMD_USER_DIR="$CONFIG_HOME/systemd/user"
 RCLONE_CONF="${RCLONE_CONFIG:-$CONFIG_HOME/rclone/rclone.conf}"
 GTK_BOOKMARKS="$CONFIG_HOME/gtk-3.0/bookmarks"
 MANAGED_MARKER="Managed by $CLI_NAME"
+# Written when Google refuses the login; while it exists the mount does not even try
+# to start (see auth-guard). Deleted by reconnect, or ignored once rclone.conf is newer.
+# One per service, named after it: <service>.login-refused in the state dir.
 LOCAL_BIN="$HOME/.local/bin"
 
 # Runtime state, filled by load_state / setup.
@@ -297,8 +300,10 @@ service_result()       { systemctl_user show -p Result --value "$SERVICE.service
 
 # The last error goes into `status --json` (shown in the bar popup) and into
 # doctor's output, so scrub anything that looks like a credential first.
+# Only rclone's own lines: `-u` would also match systemd's "Failed to start …",
+# which hides the reason (and made a refused login look like any other failure).
 service_last_error() {
-  journalctl --user -u "$SERVICE.service" -p err -n 1 -o cat --no-pager 2>/dev/null | tail -n 1 | redact_secrets
+  journalctl --user _SYSTEMD_USER_UNIT="$SERVICE.service" -p err -n 1 -o cat --no-pager 2>/dev/null | tail -n 1 | redact_secrets
 }
 
 # Restart backoff. A failing mount (no network, a refused login) used to be
@@ -315,6 +320,37 @@ install_backoff_dropin() {
   mkdir -p "$(dirname "$path")" || return 1
   printf '%s\n' "# Written by $CLI_NAME doctor --fix: wait longer between failed starts." \
     "[Service]" "RestartSteps=8" "RestartMaxDelaySec=1h" > "$path" || return 1
+  systemctl_user daemon-reload
+}
+
+# Login guard. A refused login never fixes itself, so retrying (even with the
+# backoff) only burns CPU and battery. ExecStopPost runs `auth-guard`: when the
+# run that just ended was refused by Google, it writes the flag file and stops the
+# unit, which cancels the pending restart. ExecCondition then skips every start
+# (boot included) while the flag exists and rclone.conf is not newer than it, so
+# a `rclone config reconnect` made by hand also counts. ExecStartPost deletes the
+# flag once a mount came up. Units from the template carry these lines; an
+# adopted unit gets them from a drop-in (doctor --fix).
+login_flag() { printf '%s/%s.login-refused' "$STATE_DIR" "$SERVICE"; }
+login_refused() { local f; f=$(login_flag); [[ -f $f && ! $RCLONE_CONF -nt $f ]]; }
+guard_dropin_path() { printf '%s/%s.service.d/60-omarchy-login-guard.conf' "$SYSTEMD_USER_DIR" "$SERVICE"; }
+service_has_guard() { systemctl_user show -p ExecStopPost --value "$SERVICE.service" 2>/dev/null | grep -q 'auth-guard'; }
+# systemd path forms: %h for $HOME, so the unit stays readable and portable.
+unit_home_path() { local p=$1; [[ $p == "$HOME"/* ]] && p="%h${p#"$HOME"}"; printf '%s' "$p"; }
+guard_unit_lines() {
+  local flag conf cli
+  flag=$(unit_home_path "$(login_flag)"); conf=$(unit_home_path "$RCLONE_CONF"); cli=$(unit_home_path "${SELF:-$LOCAL_BIN/$CLI_NAME}")
+  printf '%s
+' \
+    "# Google refused the login: stay off until reconnect (no retry loop, no CPU)." \
+    "ExecCondition=/bin/sh -c 'test ! -e \"\$\$1\" || test \"\$\$2\" -nt \"\$\$1\"' _ $flag $conf" \
+    "ExecStartPost=-/usr/bin/rm -f $flag" \
+    "ExecStopPost=-$cli auth-guard %N"
+}
+install_guard_dropin() {
+  local path; path=$(guard_dropin_path)
+  mkdir -p "$(dirname "$path")" || return 1
+  { printf '%s\n' "# Written by $CLI_NAME doctor --fix." "[Service]"; guard_unit_lines; } > "$path" || return 1
   systemctl_user daemon-reload
 }
 
@@ -338,7 +374,7 @@ render_unit() {
       -e "s|@@REMOTE@@|$REMOTE|g" \
       -e "s|@@MOUNTPOINT@@|$mp|g" \
       -e "s|@@CACHE_MAX_SIZE@@|$cache|g" \
-      "$template"
+      "$template" | awk -v guard="$(guard_unit_lines)" '$0 == "@@LOGIN_GUARD@@" { print guard; next } { print }'
 }
 
 # install_unit <template> — writes the unit if it changed; returns 0 if written.
@@ -514,6 +550,11 @@ cmd_status() {
   # Google refused the login: say so, so the widget can offer a reconnect.
   local auth_expired=false
   [[ $state == error ]] && is_auth_error "$last_err" && auth_expired=true
+  # The guard stopped the unit after a refused login: off on purpose, waiting for reconnect.
+  if [[ $mounted != true && $unit_ok == true ]] && login_refused; then
+    state=error; auth_expired=true
+    [[ -n $last_err ]] || last_err=$(head -n 1 "$(login_flag)" | redact_secrets | cut -c1-300)
+  fi
 
   if (( JSON_OUTPUT )); then
     jq -n \
@@ -552,6 +593,7 @@ cmd_status() {
 
 cmd_start() {
   unit_exists || die "$(t err.noUnit "$CLI_NAME")"
+  login_refused && die "$(t err.loginRefused "$CLI_NAME")"
   mkdir -p "$MOUNTPOINT"
   systemctl_user start "$SERVICE.service" || die "$(t err.startFailed "$SERVICE")"
   if wait_for_mount 30; then ok "$(t start.ok "$MOUNTPOINT")"; else
@@ -588,11 +630,33 @@ cmd_reconnect() {
     [[ -n $REMOTE_TOKEN_ERROR ]] && say "    ${C_DIM}${REMOTE_TOKEN_ERROR}${C_RESET}"
     return 1
   fi
+  rm -f "$(login_flag)"
   unit_exists || return 0
   # Clear the failure counter and any backoff, then start fresh.
   systemctl_user reset-failed "$SERVICE.service" >/dev/null 2>&1 || true
   systemctl_user stop "$SERVICE.service" >/dev/null 2>&1 || true
   cmd_start
+}
+
+# auth-guard <unit-name> — run by systemd as ExecStopPost, never by hand.
+# If the run that just ended died because Google refused the login, write the
+# flag and stop the unit (cancels the queued restart). Any other failure (no
+# network, a hiccup) is left to the normal restart with backoff.
+cmd_auth_guard() {
+  [[ -n ${1:-} ]] && SERVICE=$1
+  [[ ${SERVICE_RESULT:-success} == success || -z ${INVOCATION_ID:-} ]] && return 0
+  local line="" i
+  # rclone's last words can reach the journal a moment after it exited.
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    line=$(journalctl --user _SYSTEMD_INVOCATION_ID="$INVOCATION_ID" -o cat --no-pager 2>/dev/null | grep -iE "$AUTH_ERROR_RE" | tail -n 1)
+    [[ -n $line ]] && break
+    sleep 0.2
+  done
+  [[ -n $line ]] || return 0
+  mkdir -p "$STATE_DIR"
+  printf '%s\n' "$line" | redact_secrets > "$(login_flag)"
+  printf '%s\n' "$(t guard.stopping "$SERVICE" "$CLI_NAME")"
+  systemctl_user --no-block stop "$SERVICE.service"
 }
 
 cmd_logs() {
@@ -695,6 +759,10 @@ cmd_doctor() {
     if service_has_backoff; then d_ok "$(t doctor.backoff)"; else
       if (( DOCTOR_FIX )); then install_backoff_dropin && d_ok "$(t doctor.backoffFixed "$(backoff_dropin_path)")"; else d_warn "$(t doctor.noBackoff "$CLI_NAME")"; fi
     fi
+    if service_has_guard; then d_ok "$(t doctor.guard)"; else
+      if (( DOCTOR_FIX )); then install_guard_dropin && d_ok "$(t doctor.guardFixed "$(guard_dropin_path)")"; else d_warn "$(t doctor.noGuard "$CLI_NAME")"; fi
+    fi
+    login_refused && d_fail "$(t doctor.loginRefused "$CLI_NAME")"
     local active; active=$(service_active_state)
     [[ $(service_sub_state) == auto-restart* ]] && active=failed
     case $active in
@@ -765,6 +833,10 @@ cmd_remove() {
     else
       info "$(t remove.unitKept "$(unit_path)")"
     fi
+    # Our own drop-ins point at this CLI; they go with it.
+    rm -f "$(backoff_dropin_path)" "$(guard_dropin_path)"
+    rmdir "$(dirname "$(guard_dropin_path)")" 2>/dev/null
+    systemctl_user daemon-reload
   fi
 
   # desktop bits
